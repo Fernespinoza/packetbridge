@@ -16,22 +16,40 @@
 
   function setStatus(msg) { statusEl.textContent = msg; }
 
+  /* Field reading uses pdf-lib (pdf.js getFieldObjects loses radio groups).
+     Quirk found live 2026-10-28: the 1884's delivery-method radio stores its
+     /V as a PDF string instead of a name, so getSelected() comes back empty.
+     Fallback: read the widgets' appearance states — the selected widget's
+     /AS is the chosen option (PDF-name encoded, e.g. /In#20person#2F...). */
+  function decodePdfName(s) {
+    return String(s).replace(/^\/+/, "").replace(/#([0-9A-Fa-f]{2})/g, function (_, hex) {
+      return String.fromCharCode(parseInt(hex, 16));
+    });
+  }
+
   async function readPdfFields(file) {
     var buf = await file.arrayBuffer();
-    var doc = await pdfjsLib.getDocument({ data: buf }).promise;
-    var fieldObjects = await doc.getFieldObjects();
+    var doc = await window.PDFLib.PDFDocument.load(buf, { ignoreEncryption: true });
+    var form = doc.getForm();
     var flat = {};
-    if (fieldObjects) {
-      Object.keys(fieldObjects).forEach(function (name) {
-        var instances = fieldObjects[name];
-        if (!instances || !instances.length) { flat[name] = null; return; }
-        var v = instances[0].value;
-        if (instances[0].type === "checkbox" && typeof v !== "string") {
-          v = v ? "/Yes" : "/Off";
+    form.getFields().forEach(function (field) { flat[field.getName()] = null; });
+    Object.keys(flat).forEach(function (name) {
+      try { flat[name] = form.getTextField(name).getText() || null; return; } catch (e) { /* not a text field */ }
+      try { flat[name] = form.getCheckBox(name).isChecked() ? "/Yes" : "/Off"; return; } catch (e) { /* not a checkbox */ }
+      try {
+        var rg = form.getRadioGroup(name);
+        var sel = rg.getSelected();
+        if (sel) { flat[name] = sel; return; }
+        var widgets = rg.acroField.getWidgets();
+        for (var i = 0; i < widgets.length; i++) {
+          var as = widgets[i].getAppearanceState();
+          if (as && String(as) !== "/Off") { flat[name] = decodePdfName(String(as)); return; }
         }
-        flat[name] = (v === undefined ? null : v);
-      });
-    }
+        flat[name] = null; return;
+      } catch (e) { /* not a radio group */ }
+      try { var dd = form.getDropdown(name).getSelected(); flat[name] = dd && dd.length ? dd[0] : null; return; } catch (e) { /* not a dropdown */ }
+      flat[name] = null;
+    });
     return flat;
   }
 
@@ -83,7 +101,7 @@
 
     var have = [
       "Date of birth: " + val(c.dob),
-      "Address: " + [c.address.street, c.address.city, c.address.state, c.address.zip].filter(Boolean).join(", "),
+      "Address: " + [c.address.street, c.address.city, ((c.address.state || "") + " " + (c.address.zip || "")).trim()].filter(Boolean).join(", "),
       "Phone: " + val(c.phone) + (c.altPhone ? "  Alternate: " + c.altPhone : ""),
       "Primary language: " + val(c.language),
       "Education: " + val(c.education),
