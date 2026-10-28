@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#14532d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<title>PacketBridge — TWC AT Packet Prep</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; margin: 0; line-height: 1.55; }
+  header, main { max-width: 52rem; margin: 0 auto; padding: 1rem 1.25rem; }
+  header { border-bottom: 3px solid #14532d; }
+  h1 { margin: 0.2rem 0; font-size: 1.9rem; }
+  .tagline { margin: 0; font-size: 1.05rem; }
+  .privacy { background: #14532d; color: #fff; padding: 0.6rem 0.9rem; border-radius: 0.4rem; }
+  @media (prefers-color-scheme: dark) { .privacy { background: #166534; } }
+  fieldset { border: 2px solid currentColor; border-radius: 0.4rem; margin: 1rem 0; }
+  legend { font-weight: 700; padding: 0 0.4rem; }
+  .field { margin: 0.9rem 0; }
+  label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+  input[type="file"] { width: 100%; font-size: 1rem; padding: 0.4rem 0; }
+  button { font-size: 1.1rem; font-weight: 700; padding: 0.7rem 1.4rem; border-radius: 0.4rem; border: 2px solid #14532d; background: #14532d; color: #fff; cursor: pointer; min-height: 48px; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
+  #status { font-weight: 600; margin-top: 1rem; }
+  #readout h2 { border-bottom: 2px solid currentColor; padding-bottom: 0.2rem; margin-top: 1.8rem; }
+  #readout li { margin: 0.3rem 0; }
+  .conflict { font-weight: 600; }
+  .version { opacity: 0.75; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PacketBridge</h1>
+  <p class="tagline">Referral in. Report packet out. Nothing leaves your computer.</p>
+  <p class="privacy">Private by design: this page runs entirely on this computer, offline. No uploads, no accounts, no tracking. Your packet files are read only by this page, only when you pick them.</p>
+</header>
+<main>
+  <section aria-labelledby="load-h">
+    <h2 id="load-h">1. Load the referral packet</h2>
+    <form id="packet-form">
+      <fieldset>
+        <legend>Referral packet files (PDF)</legend>
+        <div class="field">
+          <label for="f1884">VR1884 Referral (required)</label>
+          <input type="file" id="f1884" accept="application/pdf,.pdf" required>
+        </div>
+        <div class="field">
+          <label for="fsa">Service Authorization — SA (recommended)</label>
+          <input type="file" id="fsa" accept="application/pdf,.pdf">
+        </div>
+        <div class="field">
+          <label for="feas">EAS Consultation Report (recommended)</label>
+          <input type="file" id="feas" accept="application/pdf,.pdf">
+        </div>
+      </fieldset>
+      <button type="submit" id="read-btn">Read packet</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section aria-labelledby="readout-h">
+    <h2 id="readout-h">2. Readout</h2>
+    <div id="readout">
+      <p>No packet loaded yet. After you read a packet, this section shows what was found, what training is being requested, any conflicts to check, and what is still missing.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="next-h">
+    <h2 id="next-h">Coming next</h2>
+    <p>The report-details form (your provider profile, session log, and assessment subjects) and one-click generation of the VR2868 and both VR2902s are the next build steps. This version reads packets and shows the readout.</p>
+    <p class="version">PacketBridge v0.1 — extraction + readout. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+  </section>
+</main>
+<noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>
+<script src="lib/pdf.min.js"></script>
+<script src="extract.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
