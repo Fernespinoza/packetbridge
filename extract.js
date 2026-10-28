@@ -76,9 +76,19 @@
     });
     var delivery = get("VR Counselor approves all other AT training to be provided using the following delivery method");
     if (delivery && delivery.charAt(0) === "/") delivery = delivery.slice(1);
+    var serviceRequested = get("Service Requested");
+    /* Messy source files happen (Samuel's original 1884 literally stores
+       "tRAININGAT Training"). If a canonical label is inside, prefer it. */
+    if (serviceRequested) {
+      var canonicalSvc = ["AT Baseline Assessment", "AT Post-Training Assessment", "AT Post-Assessment",
+        "Assistive Technology Training", "Assistive Technology Assessment", "AT Training"];
+      for (var ci = 0; ci < canonicalSvc.length; ci++) {
+        if (serviceRequested.indexOf(canonicalSvc[ci]) >= 0) { serviceRequested = canonicalSvc[ci]; break; }
+      }
+    }
     return {
       referral: {
-        serviceRequested: get("Service Requested"),
+        serviceRequested: serviceRequested,
         date: get("Date of Referral"),
         trainerNamed: get("Trainer Name and Contractor Agency")
       },
