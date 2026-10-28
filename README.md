@@ -4,7 +4,7 @@
 
 PacketBridge reads a Texas Workforce Commission (TWC) assistive-technology referral packet — VR1884 Referral + Service Authorization (SA) + EAS Consultation Report, all PDFs — and shows a plain-language readout: what was found, what training is being requested, any conflicts between the documents, and what is still missing.
 
-**Live app:** https://nandomango702.github.io/packetbridge/
+**Live app:** https://fernespinoza.github.io/packetbridge/
 
 ## Privacy model — read this first
 
