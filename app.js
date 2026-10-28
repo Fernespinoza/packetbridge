@@ -183,6 +183,7 @@
       var easText = feas ? await readPdfText(feas) : null;
       var record = window.PacketBridgeExtract.buildRecord(fields, saText, easText);
       renderReadout(record);
+      if (window.PBDetails && window.PBDetails.onRecord) window.PBDetails.onRecord(record);
       setStatus("Done. Readout is below" + (fsa ? "" : " — note: no SA was loaded, so authorization details are missing.") + (feas ? "" : " No EAS was loaded."));
       document.getElementById("readout-h").setAttribute("tabindex", "-1");
       document.getElementById("readout-h").focus({ preventScroll: false });

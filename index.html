@@ -21,6 +21,16 @@
   .field { margin: 0.9rem 0; }
   label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
   input[type="file"] { width: 100%; font-size: 1rem; padding: 0.4rem 0; }
+  .fld { margin: 0.55rem 0; }
+  .fld label { display: block; font-weight: 600; margin-bottom: 0.15rem; }
+  .fld input[type="text"], .fld input[type="email"], .fld input[type="date"],
+  .fld input[type="number"], .fld textarea, .fld select {
+    width: 100%; max-width: 34rem; padding: 0.45rem; font: inherit;
+    border: 1px solid #888; border-radius: 0.35rem;
+  }
+  .fld textarea { width: 100%; }
+  fieldset.session-row { border: 1px solid #aaa; border-radius: 0.5rem; margin: 0.6rem 0; padding: 0.6rem 0.8rem; }
+  #subjects-list label { margin-left: 0.35rem; }
   button { font-size: 1.1rem; font-weight: 700; padding: 0.7rem 1.4rem; border-radius: 0.4rem; border: 2px solid #14532d; background: #14532d; color: #fff; cursor: pointer; min-height: 48px; }
   button:focus-visible, input:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
   #status { font-weight: 600; margin-top: 1rem; }
@@ -67,16 +77,72 @@
     </div>
   </section>
 
+  <section id="details-section" aria-labelledby="details-h">
+    <h2 id="details-h" tabindex="-1">3. Report details</h2>
+    <p>Everything the report forms need that is NOT in the referral packet. Your provider profile is
+       entered once and kept only on this device. After you read a packet above, the subjects below
+       are prefilled from it. Save a draft to pick up later — drafts are files on your computer,
+       never uploaded.</p>
+
+    <h3>Your provider profile (entered once)</h3>
+    <div id="profile-fields"></div>
+
+    <h3>This packet</h3>
+    <fieldset>
+      <legend>Mode</legend>
+      <div><input type="radio" name="pb-mode" id="mode-prep" value="prep" checked>
+        <label for="mode-prep">Prep — headers and subjects only, assessment ratings left blank</label></div>
+      <div><input type="radio" name="pb-mode" id="mode-complete" value="complete">
+        <label for="mode-complete">Complete — include assessment ratings</label></div>
+      <p id="ratings-note" hidden>The per-task rating grids (Novice / Intermediate / Advanced for each
+        VR2902 task, with subject totals added up for you) are the next build step. Everything else
+        on this form already works.</p>
+    </fieldset>
+    <div class="fld"><label for="dt-reportDate">Report date (VR2868)</label>
+      <input type="date" id="dt-reportDate"></div>
+    <div class="fld"><label for="dt-assessmentDate">Assessment date (VR2902s)</label>
+      <input type="date" id="dt-assessmentDate"></div>
+
+    <h3>Session log — VR2868 (up to 14 sessions)</h3>
+    <div id="sessions-list"></div>
+    <p><button type="button" id="add-session">Add a session</button></p>
+
+    <div class="fld"><label for="dt-problems">Software or hardware problems encountered</label>
+      <textarea id="dt-problems" rows="3"></textarea></div>
+    <div class="fld"><label for="dt-effectiveness">Training effectiveness</label>
+      <textarea id="dt-effectiveness" rows="3"></textarea></div>
+    <div class="fld"><label for="dt-additionalNeeds">Additional training needs (if any)</label>
+      <textarea id="dt-additionalNeeds" rows="2"></textarea></div>
+    <div class="fld"><label for="dt-followUp">Recommended follow-up period</label>
+      <select id="dt-followUp">
+        <option value="">Not specified</option>
+        <option value="Short">Short</option>
+        <option value="Long">Long</option>
+      </select></div>
+
+    <h3>Assessment subjects — VR2902</h3>
+    <div id="subjects-list"></div>
+
+    <h3>Draft</h3>
+    <p>
+      <button type="button" id="save-draft">Save draft</button>
+      <button type="button" id="load-draft-btn">Load draft…</button>
+      <input type="file" id="load-draft-file" accept=".json,application/json" hidden>
+    </p>
+    <p id="details-status" role="status" aria-live="polite"></p>
+  </section>
+
   <section aria-labelledby="next-h">
     <h2 id="next-h">Coming next</h2>
-    <p>The report-details form (your provider profile, session log, and assessment subjects) and one-click generation of the VR2868 and both VR2902s are the next build steps. This version reads packets and shows the readout.</p>
-    <p class="version">PacketBridge v0.1.3 — extraction + readout. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+    <p>Next build steps: the per-task VR2902 rating grids (for Complete mode), then one-click generation of the VR2868 and both VR2902s from everything above.</p>
+    <p class="version">PacketBridge v0.2.0 — extraction, readout, and the report-details form. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
   </section>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
 <script src="extract.js"></script>
+<script src="details.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
