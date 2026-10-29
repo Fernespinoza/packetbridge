@@ -262,6 +262,25 @@
       var sec = sectionForSubject(tasksData() ? tasksData().sections : [], subject);
       if (sec) span.textContent = scoreText(scoreForGroup(ratingsState[phase], sec.groups[gi]));
     });
+    /* Baseline echoes beside the post-training controls: what you rated
+       this task (and this group) before training, for quick comparison. */
+    document.querySelectorAll("[data-baseline-echo]").forEach(function (span) {
+      var v = ratingsState.baseline[span.getAttribute("data-baseline-echo")];
+      span.textContent = "Baseline: " + (v ? v : "not rated");
+    });
+    document.querySelectorAll("[data-baseline-score]").forEach(function (span) {
+      var parts = span.getAttribute("data-baseline-score").split("|");
+      var sec = sectionForSubject(tasksData() ? tasksData().sections : [], parts[0]);
+      if (sec) {
+        var sc = scoreForGroup(ratingsState.baseline, sec.groups[parseInt(parts[1], 10)]);
+        span.textContent = sc.sum === null ? "" : " (baseline score: " + sc.sum + " of " + sc.max + ")";
+      }
+    });
+    document.querySelectorAll("[data-baseline-wpm]").forEach(function (span) {
+      var b = ratingsState.baseline;
+      var gross = b["Keyboard Speed Gross WPM"], net = b["Keyboard Speed Net WPM"];
+      span.textContent = (gross || net) ? "Baseline: Gross " + (gross || "—") + ", Net " + (net || "—") : "";
+    });
   }
 
   function ratingRow(phase, subject, group, groupIdx, task) {
@@ -286,6 +305,12 @@
     });
     row.appendChild(lab);
     row.appendChild(sel);
+    if (phase === "post") {
+      var echo = document.createElement("span");
+      echo.className = "baseline-echo";
+      echo.setAttribute("data-baseline-echo", task.field);
+      row.appendChild(echo);
+    }
     return row;
   }
 
@@ -327,6 +352,12 @@
         var span = document.createElement("span");
         span.setAttribute("data-score-for", phase + "|" + subj + "|" + gi);
         glab.appendChild(span);
+        if (phase === "post") {
+          var bs = document.createElement("span");
+          bs.className = "baseline-echo";
+          bs.setAttribute("data-baseline-score", subj + "|" + gi);
+          glab.appendChild(bs);
+        }
         fs.appendChild(glab);
         g.tasks.forEach(function (t) { fs.appendChild(ratingRow(phase, subj, g, gi, t)); });
       });
@@ -337,9 +368,16 @@
           inp.setAttribute("aria-label", wf);
           inp.addEventListener("change", function () {
             if (inp.value) ratingsState[phase][wf] = inp.value; else delete ratingsState[phase][wf];
+            refreshScoreSpans();
           });
           fs.appendChild(field(wf, inp));
         });
+        if (phase === "post") {
+          var wpmEcho = document.createElement("p");
+          wpmEcho.className = "baseline-echo";
+          wpmEcho.setAttribute("data-baseline-wpm", "1");
+          fs.appendChild(wpmEcho);
+        }
       }
       host.appendChild(fs);
     });
