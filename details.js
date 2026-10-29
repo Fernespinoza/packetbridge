@@ -45,11 +45,36 @@
       effectiveness: "",
       additionalNeeds: "",
       followUp: "", /* "" | "Short" | "Long" — VR2868 follow-up period radio */
-      subjects: subjects
+      subjects: subjects,
+      ratings: { baseline: {}, post: {} } /* field name -> "0"|"1"|"2" (WPM fields: free text) */
     };
   }
 
-  function validateDetails(d) {
+  /* The VR2902 scale is the form's own: 0/1/2 per task, score = the sum. */
+  function scoreForGroup(ratingsObj, group) {
+    var sum = 0, rated = 0;
+    group.tasks.forEach(function (t) {
+      var v = ratingsObj ? ratingsObj[t.field] : undefined;
+      if (v === "0" || v === "1" || v === "2") { sum += parseInt(v, 10); rated++; }
+    });
+    return { sum: rated ? sum : null, rated: rated, total: group.tasks.length, max: group.tasks.length * 2 };
+  }
+
+  function computeScores(ratingsObj, sections) {
+    var out = {};
+    (sections || []).forEach(function (s) {
+      s.groups.forEach(function (g) { out[g.scoreField] = scoreForGroup(ratingsObj, g); });
+    });
+    return out;
+  }
+
+  function sectionForSubject(sections, subject) {
+    var found = null;
+    (sections || []).forEach(function (s) { if (s.subject === subject) found = s; });
+    return found;
+  }
+
+  function validateDetails(d, sections) {
     var warnings = [];
     if (!d) return ["No details yet."];
     if (d.sessions.length > MAX_SESSIONS)
@@ -61,6 +86,20 @@
     });
     if (!d.subjects.length)
       warnings.push("No VR2902 subjects selected — the generated packet will have no assessments.");
+    if (d.mode === "complete" && sections) {
+      d.subjects.forEach(function (subj) {
+        var sec = sectionForSubject(sections, subj);
+        if (!sec) return;
+        var any = false;
+        sec.groups.forEach(function (g) {
+          g.tasks.forEach(function (t) {
+            if ((d.ratings.baseline && d.ratings.baseline[t.field]) ||
+                (d.ratings.post && d.ratings.post[t.field])) any = true;
+          });
+        });
+        if (!any) warnings.push("Complete mode: no ratings entered yet for " + subj + ".");
+      });
+    }
     return warnings;
   }
 
@@ -94,7 +133,8 @@
     SUBJECTS_ALL: SUBJECTS_ALL, MAX_SESSIONS: MAX_SESSIONS, PROFILE_KEY: PROFILE_KEY,
     todayISO: todayISO, blankProfile: blankProfile, blankSession: blankSession,
     blankDetails: blankDetails, validateDetails: validateDetails,
-    serializeDraft: serializeDraft, parseDraft: parseDraft
+    serializeDraft: serializeDraft, parseDraft: parseDraft,
+    scoreForGroup: scoreForGroup, computeScores: computeScores, sectionForSubject: sectionForSubject
   };
   if (typeof module !== "undefined" && module.exports) module.exports = logic;
   global.PacketBridgeDetails = logic;
@@ -204,12 +244,139 @@
     return out;
   }
 
-  /* ---- whole form ---- */
-  function collectDetails() {
+  /* ---- ratings (Phase 3b) ---- */
+  var ratingsState = { baseline: {}, post: {} };
+  var selCounter = 0;
+
+  function tasksData() { return (typeof window !== "undefined" && window.PacketBridgeTasks) || null; }
+
+  function scoreText(sc) {
+    return sc.sum === null ? "not rated yet" : (sc.sum + " of " + sc.max + " (" + sc.rated + " of " + sc.total + " tasks rated)");
+  }
+
+  function refreshScoreSpans() {
+    document.querySelectorAll("[data-score-for]").forEach(function (span) {
+      var parts = span.getAttribute("data-score-for").split("|");
+      var phase = parts[0], subject = parts[1], gi = parseInt(parts[2], 10);
+      var sec = sectionForSubject(tasksData() ? tasksData().sections : [], subject);
+      if (sec) span.textContent = scoreText(scoreForGroup(ratingsState[phase], sec.groups[gi]));
+    });
+  }
+
+  function ratingRow(phase, subject, group, groupIdx, task) {
+    var row = document.createElement("div");
+    row.className = "rating-task";
+    var sel = document.createElement("select");
+    sel.id = "rate-" + (selCounter++);
+    ["", "0", "1", "2"].forEach(function (v) {
+      var o = document.createElement("option");
+      o.value = v;
+      o.textContent = v === "" ? "—" : v;
+      sel.appendChild(o);
+    });
+    sel.value = ratingsState[phase][task.field] || "";
+    var lab = document.createElement("label");
+    lab.htmlFor = sel.id;
+    lab.textContent = task.n + ". " + task.text;
+    sel.addEventListener("change", function () {
+      if (sel.value) ratingsState[phase][task.field] = sel.value;
+      else delete ratingsState[phase][task.field];
+      refreshScoreSpans();
+    });
+    row.appendChild(lab);
+    row.appendChild(sel);
+    return row;
+  }
+
+  function renderRatings() {
+    var wrap = $("ratings-wrap");
+    var grids = $("ratings-grids");
+    if (!wrap || !grids) return;
+    var complete = document.querySelector('input[name="pb-mode"]:checked').value === "complete";
+    wrap.hidden = !complete;
+    if (!complete) return;
+    var data = tasksData();
+    grids.innerHTML = "";
+    if (!data) {
+      var p0 = document.createElement("p");
+      p0.textContent = "The VR2902 task lists failed to load, so ratings are unavailable in this copy.";
+      grids.appendChild(p0);
+      return;
+    }
+    var subjects = collectSubjectsOnly();
+    if (!subjects.length) {
+      var p1 = document.createElement("p");
+      p1.textContent = "Select at least one assessment subject above and its task list will appear here.";
+      grids.appendChild(p1);
+      return;
+    }
+    subjects.forEach(function (subj) {
+      var sec = sectionForSubject(data.sections, subj);
+      var box = document.createElement("div");
+      box.className = "rating-subject";
+      var h = document.createElement("h4");
+      h.textContent = subj;
+      box.appendChild(h);
+      if (!sec) {
+        var note = document.createElement("p");
+        note.textContent = "The VR2902 has no task list for " + subj + " — there is nothing to rate for it here.";
+        box.appendChild(note);
+        grids.appendChild(box);
+        return;
+      }
+      [["baseline", "Baseline assessment"], ["post", "Post-training assessment"]].forEach(function (ph) {
+        var phase = ph[0];
+        var fs = document.createElement("fieldset");
+        fs.className = "rating-phase";
+        var legend = document.createElement("legend");
+        legend.textContent = ph[1];
+        fs.appendChild(legend);
+        sec.groups.forEach(function (g, gi) {
+          var glab = document.createElement("p");
+          glab.className = "group-label";
+          var strong = document.createElement("strong");
+          strong.textContent = g.label + " — score: ";
+          glab.appendChild(strong);
+          var span = document.createElement("span");
+          span.setAttribute("data-score-for", phase + "|" + subj + "|" + gi);
+          glab.appendChild(span);
+          fs.appendChild(glab);
+          g.tasks.forEach(function (t) { fs.appendChild(ratingRow(phase, subj, g, gi, t)); });
+        });
+        if (subj === "Keyboard Knowledge") {
+          data.wpmFields.forEach(function (wf) {
+            var inp = textInput("", "number");
+            inp.min = "0"; inp.value = ratingsState[phase][wf] || "";
+            inp.setAttribute("aria-label", ph[1] + " " + wf);
+            inp.addEventListener("change", function () {
+              if (inp.value) ratingsState[phase][wf] = inp.value; else delete ratingsState[phase][wf];
+            });
+            fs.appendChild(field(wf, inp));
+          });
+        }
+        box.appendChild(fs);
+      });
+      grids.appendChild(box);
+    });
+    refreshScoreSpans();
+  }
+
+  function collectSubjectsOnly() {
     var subjects = [];
     SUBJECTS_ALL.forEach(function (s) {
       var cb = $("subj-" + s.replace(/\s+/g, "-"));
       if (cb && cb.checked) subjects.push(s);
+    });
+    return subjects;
+  }
+
+  /* ---- whole form ---- */
+  function collectDetails() {
+    var ratings = { baseline: {}, post: {} };
+    ["baseline", "post"].forEach(function (ph) {
+      Object.keys(ratingsState[ph]).forEach(function (k) {
+        if (ratingsState[ph][k] !== "" && ratingsState[ph][k] != null) ratings[ph][k] = ratingsState[ph][k];
+      });
     });
     return {
       mode: document.querySelector('input[name="pb-mode"]:checked').value,
@@ -220,7 +387,8 @@
       effectiveness: $("dt-effectiveness").value.trim(),
       additionalNeeds: $("dt-additionalNeeds").value.trim(),
       followUp: $("dt-followUp").value,
-      subjects: subjects
+      subjects: collectSubjectsOnly(),
+      ratings: ratings
     };
   }
   function fillDetails(d) {
@@ -235,12 +403,17 @@
       var cb = $("subj-" + s.replace(/\s+/g, "-"));
       if (cb) cb.checked = d.subjects.indexOf(s) >= 0;
     });
+    ratingsState = {
+      baseline: Object.assign({}, (d.ratings && d.ratings.baseline) || {}),
+      post: Object.assign({}, (d.ratings && d.ratings.post) || {})
+    };
     renderSessions(d.sessions && d.sessions.length ? d.sessions : [blankSession()]);
     updateModeNote();
   }
   function updateModeNote() {
     var complete = document.querySelector('input[name="pb-mode"]:checked').value === "complete";
     $("ratings-note").hidden = !complete;
+    renderRatings();
   }
   function setDetailsStatus(msg) { $("details-status").textContent = msg; }
 
@@ -251,6 +424,7 @@
       var wrap = document.createElement("div");
       var cb = document.createElement("input");
       cb.type = "checkbox"; cb.id = "subj-" + s.replace(/\s+/g, "-");
+      cb.addEventListener("change", renderRatings);
       var lab = document.createElement("label");
       lab.htmlFor = cb.id; lab.textContent = s;
       wrap.appendChild(cb); wrap.appendChild(lab);
@@ -279,7 +453,7 @@
       a.href = URL.createObjectURL(blob); a.download = name;
       document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 400);
-      var w = validateDetails(details);
+      var w = validateDetails(details, tasksData() ? tasksData().sections : null);
       setDetailsStatus("Draft saved as " + name + (w.length ? " Heads up: " + w.join(" ") : ""));
       window.PBState = { record: currentRecord, profile: saveProfile(), details: details };
     });

@@ -31,6 +31,12 @@
   .fld textarea { width: 100%; }
   fieldset.session-row { border: 1px solid #aaa; border-radius: 0.5rem; margin: 0.6rem 0; padding: 0.6rem 0.8rem; }
   #subjects-list label { margin-left: 0.35rem; }
+  .rating-subject { border-top: 2px solid #14532d; margin-top: 1rem; }
+  fieldset.rating-phase { border: 1px solid #aaa; border-radius: 0.5rem; margin: 0.6rem 0; padding: 0.6rem 0.8rem; }
+  .rating-task { display: flex; gap: 0.6rem; align-items: baseline; margin: 0.3rem 0; }
+  .rating-task label { flex: 1; }
+  .rating-task select { font: inherit; padding: 0.3rem; min-width: 4.5rem; }
+  .group-label { margin: 0.7rem 0 0.3rem; }
   button { font-size: 1.1rem; font-weight: 700; padding: 0.7rem 1.4rem; border-radius: 0.4rem; border: 2px solid #14532d; background: #14532d; color: #fff; cursor: pointer; min-height: 48px; }
   button:focus-visible, input:focus-visible { outline: 3px solid #f59e0b; outline-offset: 2px; }
   #status { font-weight: 600; margin-top: 1rem; }
@@ -94,9 +100,10 @@
         <label for="mode-prep">Prep — headers and subjects only, assessment ratings left blank</label></div>
       <div><input type="radio" name="pb-mode" id="mode-complete" value="complete">
         <label for="mode-complete">Complete — include assessment ratings</label></div>
-      <p id="ratings-note" hidden>The per-task rating grids (Novice / Intermediate / Advanced for each
-        VR2902 task, with subject totals added up for you) are the next build step. Everything else
-        on this form already works.</p>
+      <p id="ratings-note" hidden>Rating scale, straight from the form: <strong>0</strong> = could not
+        complete the task, <strong>1</strong> = completed with assistance (prompting or hints),
+        <strong>2</strong> = completed without assistance. Scores add themselves up as you rate.
+        Leave a task blank if it wasn't assessed.</p>
     </fieldset>
     <div class="fld"><label for="dt-reportDate">Report date (VR2868)</label>
       <input type="date" id="dt-reportDate"></div>
@@ -123,6 +130,11 @@
     <h3>Assessment subjects — VR2902</h3>
     <div id="subjects-list"></div>
 
+    <div id="ratings-wrap" hidden>
+      <h3>Assessment ratings</h3>
+      <div id="ratings-grids"></div>
+    </div>
+
     <h3>Draft</h3>
     <p>
       <button type="button" id="save-draft">Save draft</button>
@@ -134,14 +146,15 @@
 
   <section aria-labelledby="next-h">
     <h2 id="next-h">Coming next</h2>
-    <p>Next build steps: the per-task VR2902 rating grids (for Complete mode), then one-click generation of the VR2868 and both VR2902s from everything above.</p>
-    <p class="version">PacketBridge v0.2.0 — extraction, readout, and the report-details form. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+    <p>Next build step: one-click generation of the VR2868 and both VR2902s from everything above.</p>
+    <p class="version">PacketBridge v0.3.0 — extraction, readout, report form, and rating grids. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
   </section>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>
 <script src="lib/pdf.min.js"></script>
 <script src="lib/pdf-lib.min.js"></script>
 <script src="extract.js"></script>
+<script src="tasks-data.js"></script>
 <script src="details.js"></script>
 <script src="app.js"></script>
 </body>
