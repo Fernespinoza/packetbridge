@@ -86,14 +86,14 @@
   <section id="details-section" aria-labelledby="details-h">
     <h2 id="details-h" tabindex="-1">3. Report details</h2>
     <p>Everything the report forms need that is NOT in the referral packet. Your provider profile is
-       entered once and kept only on this device. After you read a packet above, the subjects below
-       are prefilled from it. Save a draft to pick up later — drafts are files on your computer,
+       entered once and kept only on this device. The rest of the form follows the packet's own
+       order: the VR2902 baseline assessment, then the VR2868 training report, then the VR2902
+       post-training assessment. Save a draft to pick up later — drafts are files on your computer,
        never uploaded.</p>
 
     <h3>Your provider profile (entered once)</h3>
     <div id="profile-fields"></div>
 
-    <h3>This packet</h3>
     <fieldset>
       <legend>Mode</legend>
       <div><input type="radio" name="pb-mode" id="mode-prep" value="prep" checked>
@@ -105,15 +105,23 @@
         <strong>2</strong> = completed without assistance. Scores add themselves up as you rate.
         Leave a task blank if it wasn't assessed.</p>
     </fieldset>
-    <div class="fld"><label for="dt-reportDate">Report date (VR2868)</label>
-      <input type="date" id="dt-reportDate"></div>
-    <div class="fld"><label for="dt-assessmentDate">Assessment date (VR2902s)</label>
-      <input type="date" id="dt-assessmentDate"></div>
 
-    <h3>Session log — VR2868 (up to 14 sessions)</h3>
+    <h3>VR2902 — Baseline assessment</h3>
+    <div class="fld"><label for="dt-assessmentDate">Baseline assessment date</label>
+      <input type="date" id="dt-assessmentDate"></div>
+    <h4>Assessment subjects (applies to both VR2902s)</h4>
+    <div id="subjects-list"></div>
+    <div id="ratings-baseline-wrap" hidden>
+      <h4>Baseline ratings</h4>
+      <div id="ratings-baseline"></div>
+    </div>
+
+    <h3>VR2868 — Training report</h3>
+    <div class="fld"><label for="dt-reportDate">Report date</label>
+      <input type="date" id="dt-reportDate"></div>
+    <h4>Session log (up to 14 sessions)</h4>
     <div id="sessions-list"></div>
     <p><button type="button" id="add-session">Add a session</button></p>
-
     <div class="fld"><label for="dt-problems">Software or hardware problems encountered</label>
       <textarea id="dt-problems" rows="3"></textarea></div>
     <div class="fld"><label for="dt-effectiveness">Training effectiveness</label>
@@ -127,12 +135,12 @@
         <option value="Long">Long</option>
       </select></div>
 
-    <h3>Assessment subjects — VR2902</h3>
-    <div id="subjects-list"></div>
-
-    <div id="ratings-wrap" hidden>
-      <h3>Assessment ratings</h3>
-      <div id="ratings-grids"></div>
+    <h3>VR2902 — Post-training assessment</h3>
+    <div class="fld"><label for="dt-postAssessmentDate">Post-training assessment date</label>
+      <input type="date" id="dt-postAssessmentDate"></div>
+    <div id="ratings-post-wrap" hidden>
+      <h4>Post-training ratings</h4>
+      <div id="ratings-post"></div>
     </div>
 
     <h3>Draft</h3>
@@ -147,7 +155,7 @@
   <section aria-labelledby="next-h">
     <h2 id="next-h">Coming next</h2>
     <p>Next build step: one-click generation of the VR2868 and both VR2902s from everything above.</p>
-    <p class="version">PacketBridge v0.3.0 — extraction, readout, report form, and rating grids. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+    <p class="version">PacketBridge v0.3.1 — extraction, readout, report form, and rating grids. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
   </section>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>

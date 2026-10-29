@@ -40,6 +40,7 @@
       mode: "prep", /* "prep" = ratings blank | "complete" = ratings entered */
       reportDate: todayISO(),
       assessmentDate: "",
+      postAssessmentDate: "",
       sessions: [blankSession()],
       problems: "",
       effectiveness: "",
@@ -288,76 +289,71 @@
     return row;
   }
 
-  function renderRatings() {
-    var wrap = $("ratings-wrap");
-    var grids = $("ratings-grids");
-    if (!wrap || !grids) return;
-    var complete = document.querySelector('input[name="pb-mode"]:checked').value === "complete";
-    wrap.hidden = !complete;
-    if (!complete) return;
+  function renderPhase(phase, host) {
     var data = tasksData();
-    grids.innerHTML = "";
+    host.innerHTML = "";
     if (!data) {
       var p0 = document.createElement("p");
       p0.textContent = "The VR2902 task lists failed to load, so ratings are unavailable in this copy.";
-      grids.appendChild(p0);
+      host.appendChild(p0);
       return;
     }
     var subjects = collectSubjectsOnly();
     if (!subjects.length) {
       var p1 = document.createElement("p");
       p1.textContent = "Select at least one assessment subject above and its task list will appear here.";
-      grids.appendChild(p1);
+      host.appendChild(p1);
       return;
     }
     subjects.forEach(function (subj) {
       var sec = sectionForSubject(data.sections, subj);
-      var box = document.createElement("div");
-      box.className = "rating-subject";
-      var h = document.createElement("h4");
-      h.textContent = subj;
-      box.appendChild(h);
       if (!sec) {
         var note = document.createElement("p");
-        note.textContent = "The VR2902 has no task list for " + subj + " — there is nothing to rate for it here.";
-        box.appendChild(note);
-        grids.appendChild(box);
+        note.textContent = subj + ": the VR2902 has no task list for this subject — nothing to rate here.";
+        host.appendChild(note);
         return;
       }
-      [["baseline", "Baseline assessment"], ["post", "Post-training assessment"]].forEach(function (ph) {
-        var phase = ph[0];
-        var fs = document.createElement("fieldset");
-        fs.className = "rating-phase";
-        var legend = document.createElement("legend");
-        legend.textContent = ph[1];
-        fs.appendChild(legend);
-        sec.groups.forEach(function (g, gi) {
-          var glab = document.createElement("p");
-          glab.className = "group-label";
-          var strong = document.createElement("strong");
-          strong.textContent = g.label + " — score: ";
-          glab.appendChild(strong);
-          var span = document.createElement("span");
-          span.setAttribute("data-score-for", phase + "|" + subj + "|" + gi);
-          glab.appendChild(span);
-          fs.appendChild(glab);
-          g.tasks.forEach(function (t) { fs.appendChild(ratingRow(phase, subj, g, gi, t)); });
-        });
-        if (subj === "Keyboard Knowledge") {
-          data.wpmFields.forEach(function (wf) {
-            var inp = textInput("", "number");
-            inp.min = "0"; inp.value = ratingsState[phase][wf] || "";
-            inp.setAttribute("aria-label", ph[1] + " " + wf);
-            inp.addEventListener("change", function () {
-              if (inp.value) ratingsState[phase][wf] = inp.value; else delete ratingsState[phase][wf];
-            });
-            fs.appendChild(field(wf, inp));
-          });
-        }
-        box.appendChild(fs);
+      var fs = document.createElement("fieldset");
+      fs.className = "rating-phase";
+      var legend = document.createElement("legend");
+      legend.textContent = subj;
+      fs.appendChild(legend);
+      sec.groups.forEach(function (g, gi) {
+        var glab = document.createElement("p");
+        glab.className = "group-label";
+        var strong = document.createElement("strong");
+        strong.textContent = g.label + " — score: ";
+        glab.appendChild(strong);
+        var span = document.createElement("span");
+        span.setAttribute("data-score-for", phase + "|" + subj + "|" + gi);
+        glab.appendChild(span);
+        fs.appendChild(glab);
+        g.tasks.forEach(function (t) { fs.appendChild(ratingRow(phase, subj, g, gi, t)); });
       });
-      grids.appendChild(box);
+      if (subj === "Keyboard Knowledge") {
+        data.wpmFields.forEach(function (wf) {
+          var inp = textInput("", "number");
+          inp.min = "0"; inp.value = ratingsState[phase][wf] || "";
+          inp.setAttribute("aria-label", wf);
+          inp.addEventListener("change", function () {
+            if (inp.value) ratingsState[phase][wf] = inp.value; else delete ratingsState[phase][wf];
+          });
+          fs.appendChild(field(wf, inp));
+        });
+      }
+      host.appendChild(fs);
     });
+  }
+
+  function renderRatings() {
+    var complete = document.querySelector('input[name="pb-mode"]:checked').value === "complete";
+    var bw = $("ratings-baseline-wrap"), pw = $("ratings-post-wrap");
+    if (!bw || !pw) return;
+    bw.hidden = !complete;
+    pw.hidden = !complete;
+    if (!complete) return;
+    renderPhase("baseline", $("ratings-baseline"));
+    renderPhase("post", $("ratings-post"));
     refreshScoreSpans();
   }
 
@@ -382,6 +378,7 @@
       mode: document.querySelector('input[name="pb-mode"]:checked').value,
       reportDate: $("dt-reportDate").value,
       assessmentDate: $("dt-assessmentDate").value,
+      postAssessmentDate: $("dt-postAssessmentDate").value,
       sessions: collectSessions(),
       problems: $("dt-problems").value.trim(),
       effectiveness: $("dt-effectiveness").value.trim(),
@@ -395,6 +392,7 @@
     document.querySelector('input[name="pb-mode"][value="' + (d.mode === "complete" ? "complete" : "prep") + '"]').checked = true;
     $("dt-reportDate").value = d.reportDate || "";
     $("dt-assessmentDate").value = d.assessmentDate || "";
+    $("dt-postAssessmentDate").value = d.postAssessmentDate || "";
     $("dt-problems").value = d.problems || "";
     $("dt-effectiveness").value = d.effectiveness || "";
     $("dt-additionalNeeds").value = d.additionalNeeds || "";
