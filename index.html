@@ -153,10 +153,25 @@
     <p id="details-status" role="status" aria-live="polite"></p>
   </section>
 
+  <section id="generate-section" aria-labelledby="gen-h">
+    <h2 id="gen-h">4. Generate the report packet</h2>
+    <p>Builds the three filled PDFs from the packet you read and the details you entered, in packet
+       order: <strong>VR2902 Baseline, VR2868, VR2902 Post-Training</strong>. In Prep mode the
+       assessment ratings and scores stay blank and unassessed subjects are marked N/A, matching the
+       course shells. In Complete mode your ratings and their automatic scores are filled in.
+       Signatures are always left blank — those are signed by hand. Before filling, each template's
+       fingerprint is checked; if TWC has revised a form, generation stops with a warning instead of
+       filling the wrong revision. The PDFs are generated on this computer and download straight to
+       it — nothing is uploaded.</p>
+    <p><button type="button" id="generate-btn">Generate the packet (3 PDFs)</button></p>
+    <p id="generate-status" role="status" aria-live="polite"></p>
+    <ul id="generate-notes"></ul>
+  </section>
+
   <section aria-labelledby="next-h">
     <h2 id="next-h">Coming next</h2>
-    <p>Next build step: one-click generation of the VR2868 and both VR2902s from everything above.</p>
-    <p class="version">PacketBridge v0.3.2 — extraction, readout, report form, and rating grids. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+    <p>PacketBridge now covers the full path: referral in, readout, report form, and the filled report packet out. Remaining work is hardening against more real-world packet variations.</p>
+    <p class="version">PacketBridge v0.4.0 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
   </section>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>
@@ -165,6 +180,8 @@
 <script src="extract.js"></script>
 <script src="tasks-data.js"></script>
 <script src="details.js"></script>
+<script src="templates-b64.js"></script>
+<script src="generate.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
