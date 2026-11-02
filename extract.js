@@ -226,9 +226,19 @@
     return { subjects: Object.keys(subjects).sort(), notes: notes };
   }
 
+  /* Any subset of the three documents may be submitted. A null/undefined
+     argument means that document was NOT submitted: parsing runs on what is
+     present, cross-document conflict checks only compare documents that are
+     both present (every check below already guards on both sides having a
+     value), and derived.missingDocuments names the absent pieces so the
+     readout can list them for the counselor. */
   function buildRecord(fields1884, saText, easText) {
     var record = {};
-    var a = parse1884(fields1884); Object.assign(record, a);
+    var missingDocuments = [];
+    if (fields1884 === null || fields1884 === undefined) missingDocuments.push("VR1884 Referral");
+    if (saText === null || saText === undefined) missingDocuments.push("Service Authorization (SA)");
+    if (easText === null || easText === undefined) missingDocuments.push("EAS Consultation Report");
+    var a = parse1884(fields1884 || {}); Object.assign(record, a);
     if (saText) Object.assign(record, parseSA(saText));
     if (easText) Object.assign(record, parseEAS(easText));
     record.authorization = record.authorization || {};
@@ -262,7 +272,8 @@
       subjects2902: subj.subjects,
       subjectNotes: subj.notes,
       documentsToGenerate: docs,
-      conflicts: conflicts
+      conflicts: conflicts,
+      missingDocuments: missingDocuments
     };
     return record;
   }

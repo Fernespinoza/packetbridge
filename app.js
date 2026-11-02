@@ -97,7 +97,18 @@
     var frag = document.createDocumentFragment();
     var c = rec.customer, co = rec.counselor, au = rec.authorization || {}, tr = rec.training;
 
-    frag.appendChild(el("h2", "Packet for " + val(c.name)));
+    /* A partial packet may have no 1884, so the customer's name can come
+       from the SA or the EAS instead. */
+    var packetName = c.name || (rec.authorization && rec.authorization.customerName) ||
+      (rec.eas && rec.eas.reportFor) || null;
+    frag.appendChild(el("h2", "Packet for " + val(packetName)));
+
+    var missingDocs = (rec.derived && rec.derived.missingDocuments) || [];
+    if (missingDocs.length) {
+      frag.appendChild(section("Missing from this packet", missingDocs.map(function (d) {
+        return "Missing: " + d;
+      })));
+    }
 
     var have = [
       "Date of birth: " + val(c.dob),
@@ -151,6 +162,10 @@
       var cf = section("Conflicts to check — the sources disagree", rec.derived.conflicts.map(function (x) { return x; }));
       cf.querySelectorAll("li").forEach(function (li) { li.className = "conflict"; });
       frag.appendChild(cf);
+    } else if (missingDocs.length === 2) {
+      frag.appendChild(section("Conflicts to check", ["Only one document was loaded, so there is nothing to compare it against — conflicts are found by comparing the documents in a packet. Load the missing documents above to run the cross-checks."]));
+    } else if (missingDocs.length) {
+      frag.appendChild(section("Conflicts to check", ["None detected among the documents loaded — the cross-checks only compare documents that are present, so the missing documents above could not be checked."]));
     } else {
       frag.appendChild(section("Conflicts to check", ["None detected — the 1884, SA, and EAS agree on the fields checked."]));
     }
@@ -171,20 +186,26 @@
     var f1884 = document.getElementById("f1884").files[0];
     var fsa = document.getElementById("fsa").files[0];
     var feas = document.getElementById("feas").files[0];
-    if (!f1884) { setStatus("Pick the VR1884 referral PDF first."); return; }
+    /* Any subset of the packet may be read — the readout lists what is
+       missing. Only a completely empty submission is refused. */
+    if (!f1884 && !fsa && !feas) { setStatus("No files picked yet — choose at least one packet file (the VR1884, the SA, or the EAS), then read the packet."); return; }
     setStatus("Reading packet…");
     try {
-      var fields = await readPdfFields(f1884);
-      if (!fields || Object.keys(fields).length === 0) {
-        setStatus("That 1884 has no fillable form fields — it may be a flattened or scanned copy. PacketBridge v0.1 needs the fillable PDF.");
-        return;
+      var fields = null;
+      if (f1884) {
+        fields = await readPdfFields(f1884);
+        if (!fields || Object.keys(fields).length === 0) {
+          setStatus("That 1884 has no fillable form fields — it may be a flattened or scanned copy. PacketBridge v0.1 needs the fillable PDF.");
+          return;
+        }
       }
       var saText = fsa ? await readPdfText(fsa) : null;
       var easText = feas ? await readPdfText(feas) : null;
       var record = window.PacketBridgeExtract.buildRecord(fields, saText, easText);
       renderReadout(record);
       if (window.PBDetails && window.PBDetails.onRecord) window.PBDetails.onRecord(record);
-      setStatus("Done. Readout is below" + (fsa ? "" : " — note: no SA was loaded, so authorization details are missing.") + (feas ? "" : " No EAS was loaded."));
+      var missingDocs = (record.derived && record.derived.missingDocuments) || [];
+      setStatus("Done. Readout is below" + (missingDocs.length ? " — note: this packet was read without " + missingDocs.join(", ") + "; the readout lists what is missing." : "."));
       document.getElementById("readout-h").setAttribute("tabindex", "-1");
       document.getElementById("readout-h").focus({ preventScroll: false });
     } catch (err) {

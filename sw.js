@@ -1,7 +1,7 @@
 /* PacketBridge service worker — caches the PROGRAM (never packet data).
    Packet files are read in-memory by the page and are never stored, cached,
    or sent anywhere by this worker. */
-var CACHE = "packetbridge-v0.4.0";
+var CACHE = "packetbridge-v0.5.0";
 var ASSETS = [
   "./",
   "./index.html",

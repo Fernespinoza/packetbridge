@@ -302,6 +302,17 @@
     var state = window.PBState || {};
     var record = state.record;
     if (!record) { setStatus("Read a referral packet first (section 1), then generate."); return; }
+    /* Partial packets are for the readout (reporting gaps and conflicts to
+       the counselor), not for the report forms: buildPacket would silently
+       leave the missing documents' fields blank and produce forms that look
+       finished. Refuse, naming what is missing — same stop-don't-guess rule
+       as the template fingerprint check below. */
+    var missingDocs = (record.derived && record.derived.missingDocuments) || [];
+    if (missingDocs.length) {
+      setStatus("Not generating: this readout came from a partial packet — missing " + missingDocs.join(", ") + ". The report forms are built from the full packet, so read the complete packet (section 1) and then generate.");
+      setNotes(["Missing from the packet that was read: " + missingDocs.join(", ") + "."]);
+      return;
+    }
     if (!window.PBDetails) { setStatus("The report form is not loaded."); return; }
     var profile = window.PBDetails.collectProfile();
     var details = window.PBDetails.collect();
