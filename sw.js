@@ -1,7 +1,7 @@
 /* PacketBridge service worker — caches the PROGRAM (never packet data).
    Packet files are read in-memory by the page and are never stored, cached,
    or sent anywhere by this worker. */
-var CACHE = "packetbridge-v0.5.0";
+var CACHE = "packetbridge-v0.5.1";
 var ASSETS = [
   "./",
   "./index.html",
@@ -34,23 +34,30 @@ self.addEventListener("activate", function (event) {
 });
 self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
-  /* Page loads: network-first so a new version appears on the next visit
-     instead of hiding behind the cache (v0.1.1 got stuck this way).
-     The cache is the offline fallback. */
-  if (event.request.mode === "navigate") {
+  /* Page loads and program scripts: network-first so a new version
+     appears on the next visit instead of hiding behind the cache
+     (v0.1.1 got stuck this way; v0.5.0 mixed a new page with a stale
+     app.js cached during the host's propagation window). The cache
+     is the offline fallback. */
+  var url = new URL(event.request.url);
+  var ownScript = url.origin === self.location.origin &&
+    url.pathname.slice(-3) === ".js" && url.pathname.indexOf("/lib/") === -1;
+  if (event.request.mode === "navigate" || ownScript) {
     event.respondWith(
       fetch(event.request).then(function (res) {
         var copy = res.clone();
-        caches.open(CACHE).then(function (cache) { cache.put("./index.html", copy); });
+        caches.open(CACHE).then(function (cache) { cache.put(event.request, copy); });
         return res;
       }).catch(function () {
-        return caches.match("./index.html", { ignoreSearch: true });
+        return caches.match(event.request, { ignoreSearch: true }).then(function (hit) {
+          return hit || caches.match("./index.html", { ignoreSearch: true });
+        });
       })
     );
     return;
   }
-  /* Program files: cache-first (fast, offline). They refresh when the
-     service worker itself updates after a version bump. */
+  /* Everything else (libraries, templates, icons): cache-first — large,
+     stable within a version, and they refresh on a version bump. */
   event.respondWith(
     caches.match(event.request, { ignoreSearch: true }).then(function (hit) {
       return hit || fetch(event.request);
