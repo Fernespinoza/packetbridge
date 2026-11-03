@@ -206,13 +206,25 @@
       frag.appendChild(section("Conflicts to check", ["None detected — the 1884, SA, and EAS agree on the fields checked."]));
     }
 
-    frag.appendChild(section("What is still missing — you supply this", [
-      "Your provider profile (entered once, reused every packet): provider name, address, phone, fax, email, and trainer name.",
+    /* The provider-profile reminder only appears when no complete profile
+       is saved on this device — once profile info is detected, the bullet
+       is noise (Fernando's call, 2026-11-02). */
+    var profileComplete = false;
+    if (window.PBDetails && window.PBDetails.collectProfile) {
+      var prof = window.PBDetails.collectProfile();
+      profileComplete = ["providerName", "street", "city", "state", "zip", "phone", "fax", "email", "trainer"]
+        .every(function (k) { return prof[k] && String(prof[k]).trim() !== ""; });
+    }
+    var stillMissing = [];
+    if (!profileComplete)
+      stillMissing.push("Your provider profile (entered once, reused every packet): provider name, address, phone, fax, email, and trainer name.");
+    stillMissing.push(
       "For this packet: the report date, and the assessment date for the VR2902s.",
       "From the training itself: session dates, hours, and descriptions for the VR2868; what was covered, any software or hardware problems, and training effectiveness.",
       "Assessment ratings for the VR2902s — or leave them blank in Prep mode and fill them after the assessment.",
       "Stays blank by design: signatures and dates signed, the director block, and all VR staff verification fields."
-    ]));
+    );
+    frag.appendChild(section("What is still missing — you supply this", stillMissing));
 
     readoutEl.appendChild(frag);
   }
