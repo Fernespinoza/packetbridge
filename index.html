@@ -120,13 +120,10 @@
     </fieldset>
 
     <fieldset>
-      <legend>Prerequisites — confirmed by you (not read from the packet)</legend>
-      <div><input type="checkbox" id="pq-atEval">
-        <label for="pq-atEval">AT evaluation completed</label></div>
-      <div><input type="checkbox" id="pq-equipment">
-        <label for="pq-equipment">Equipment delivered and installed</label></div>
-      <div><input type="checkbox" id="pq-baseline">
-        <label for="pq-baseline">Baseline VR2902 copy received (when the SA funds post-training only)</label></div>
+      <legend>Trainer confirmation — the one thing the packet cannot show</legend>
+      <p>Everything else about sequence — the evaluation, the equipment on record, the baseline funding — is read from the packet itself; see the evidence lines in the readiness summary at the top of the readout.</p>
+      <div id="pq-baseline-wrap" hidden><input type="checkbox" id="pq-baseline">
+        <label for="pq-baseline">Baseline VR2902 copy received (a baseline was completed under an earlier authorization — this row appears only when the SA funds post-training but no baseline)</label></div>
     </fieldset>
 
     <h3>VR2902 — Baseline assessment</h3>
@@ -213,7 +210,7 @@
     <p id="tpl-status" role="status" aria-live="polite"></p>
   </details>
 
-  <p class="version">PacketBridge v0.16.0</p>
+  <p class="version">PacketBridge v0.17.0</p>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>
 <script src="lib/pdf.min.js"></script>

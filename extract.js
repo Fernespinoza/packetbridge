@@ -804,6 +804,9 @@
     if (!record.customer.bestDaysToContact) groups.customer.push("Which days and times work best for training sessions?");
     if (!record.customer.address || !record.customer.address.street)
       groups.customer.push("What is the best address for training?");
+    var hwQ = record.customer.currentHardware || null;
+    if (hwQ)
+      groups.customer.push("Is this equipment set up and working: " + hwQ + "?");
     (d.conflicts || []).forEach(function (c) { groups.counselor.push(questionFromConflict(c)); });
     return groups;
   }
@@ -856,6 +859,12 @@
       items.push(item("Baseline settled", "pass", "The SA funds post-training only, and the earlier baseline copy has been received."));
     else
       items.push(item("Baseline settled", "check", "The SA funds a post-training assessment but no baseline — get the earlier baseline copy from the counselor, or ask about authorizing one."));
+    if (missing.indexOf("EAS Consultation Report") === -1)
+      items.push(item("Evaluation evidence", "pass", "The EAS consultation report is in this packet" + (record.eas.consultDate ? " (dated " + record.eas.consultDate + ")" : "") + " — the evaluation product is on file."));
+    else if (record.referral.atEvalProvided)
+      items.push(item("Evaluation evidence", "check", "The VR1884 says an AT Evaluation Report was provided at referral, but no evaluation report is in this packet — ask the counselor for the copy."));
+    else
+      items.push(item("Evaluation evidence", "check", "No evaluation report is in this packet and the referral does not show one provided — if an evaluation must happen before training, it is not evidenced here."));
     var planBits = [];
     if (!record.customer.phone) planBits.push("no customer phone number");
     if (!record.training.deliveryMethod) planBits.push("no delivery method");
@@ -866,24 +875,30 @@
       items.push(item("Contact and plan clear", "missing", "Missing: " + planBits.join(", ") + " — the customer cannot be contacted yet."));
     else
       items.push(item("Contact and plan clear", "check", "Missing: " + planBits.join(", ") + "."));
-    var pq = [
-      { key: "atEvalDone", label: "AT evaluation completed", done: !!prereqs.atEvalDone, applies: true },
-      { key: "equipmentReady", label: "Equipment delivered and installed", done: !!prereqs.equipmentReady, applies: true },
-      { key: "baselineCopyReceived", label: "Baseline VR2902 copy received", done: !!prereqs.baselineCopyReceived, applies: !!d.baselineGap }
-    ];
-    var openPq = pq.filter(function (x) { return x.applies && !x.done; });
-    var ready = items.every(function (i) { return i.status === "pass"; }) && openPq.length === 0;
+    /* Sequence evidence (Fernando, 2026-11-03 — point 1 of his redesign):
+       what the packet itself proves, stated as facts with sources, in
+       place of trainer attestations. The packet shows what equipment the
+       customer owns; whether it is set up and working is a physical fact
+       no checkbox could prove, so it is routed to the customer questions.
+       The ONE surviving manual confirmation is baselineCopyReceived,
+       consumed by the Baseline settled item above: whether a baseline
+       was completed under an earlier SA exists in no document. */
+    var evidence = [];
+    var hw = record.customer.currentHardware || null;
+    if (hw)
+      evidence.push("Equipment on record (from the " + (record.referral.currentHardware ? "VR1884" : "EAS report") + "): " + hw + " — whether it is set up and working is asked of the customer (see the customer questions).");
+    else
+      evidence.push("No customer equipment is listed in this packet.");
+    var ready = items.every(function (i) { return i.status === "pass"; });
     var summary;
     if (ready) {
-      summary = "Ready to schedule. The referral and authorization are in hand and current, the documents agree, the baseline is settled, and the prerequisites are confirmed — the remaining work is scheduling the customer and doing the training.";
+      summary = "Ready to schedule. The referral and authorization are in hand and current, the documents agree, the baseline and evaluation are settled by the packet's own evidence — the remaining work is scheduling the customer and doing the training.";
     } else {
       var blockers = items.filter(function (i) { return i.status !== "pass"; })
         .map(function (i) { return i.label + " — " + i.detail; });
-      if (openPq.length)
-        blockers.push("Prerequisites not yet confirmed — " + openPq.map(function (x) { return x.label.toLowerCase(); }).join(", "));
       summary = "Not ready to schedule yet. Outstanding: " + blockers.join("; ");
     }
-    return { ready: ready, items: items, prereqs: pq, summary: summary };
+    return { ready: ready, items: items, evidence: evidence, summary: summary };
   }
 
   /* Document self-identification (Fernando's direction, 2026-11-02, after

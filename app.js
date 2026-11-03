@@ -158,11 +158,8 @@
       if (it.status !== "pass") li.className = "missing-line";
       ul.appendChild(li);
     });
-    r.prereqs.forEach(function (pq) {
-      if (!pq.applies) return;
-      var li = el("li", (pq.done ? "✓ Confirmed" : "⚠ Not confirmed") + " — Prerequisite: " + pq.label);
-      if (!pq.done) li.className = "missing-line";
-      ul.appendChild(li);
+    (r.evidence || []).forEach(function (ev) {
+      ul.appendChild(el("li", "Evidence — " + ev));
     });
     body.appendChild(ul);
     body.appendChild(el("p", r.summary));

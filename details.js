@@ -62,7 +62,7 @@
       subjects: subjects,
       /* Trainer-confirmed prerequisites — confirmed by hand in the form,
          never extracted from the packet (Fernando, 2026-11-02). */
-      prereqs: { atEvalDone: false, equipmentReady: false, baselineCopyReceived: false },
+      prereqs: { baselineCopyReceived: false },
       ratings: { baseline: {}, post: {} } /* field name -> "0"|"1"|"2" (WPM fields: free text) */
     };
   }
@@ -200,7 +200,11 @@
     Object.keys(base).forEach(function (k) { if (d[k] === undefined) d[k] = base[k]; });
     if (!Array.isArray(d.sessions) || !d.sessions.length) d.sessions = [blankSession()];
     if (!Array.isArray(d.subjects)) d.subjects = [];
-    d.prereqs = Object.assign({ atEvalDone: false, equipmentReady: false, baselineCopyReceived: false }, d.prereqs || {});
+    /* Only the baseline-copy confirmation survives from the old
+       prerequisites (2026-11-03): the rest is read from the packet as
+       sequence evidence. Older drafts may carry the dropped keys; they
+       are ignored. */
+    d.prereqs = { baselineCopyReceived: !!((d.prereqs || {}).baselineCopyReceived) };
     return obj;
   }
 
@@ -512,8 +516,6 @@
       followUp: $("dt-followUp").value,
       subjects: collectSubjectsOnly(),
       prereqs: {
-        atEvalDone: !!($("pq-atEval") && $("pq-atEval").checked),
-        equipmentReady: !!($("pq-equipment") && $("pq-equipment").checked),
         baselineCopyReceived: !!($("pq-baseline") && $("pq-baseline").checked)
       },
       ratings: ratings
@@ -534,9 +536,11 @@
       var cb = $("subj-" + s.replace(/\s+/g, "-"));
       if (cb) cb.checked = d.subjects.indexOf(s) >= 0;
     });
-    if ($("pq-atEval")) $("pq-atEval").checked = !!(d.prereqs && d.prereqs.atEvalDone);
-    if ($("pq-equipment")) $("pq-equipment").checked = !!(d.prereqs && d.prereqs.equipmentReady);
     if ($("pq-baseline")) $("pq-baseline").checked = !!(d.prereqs && d.prereqs.baselineCopyReceived);
+    /* The baseline-copy question only exists when the packet has a
+       baseline gap — show the confirmation row only then. */
+    var pqWrap = $("pq-baseline-wrap");
+    if (pqWrap) pqWrap.hidden = !(currentRecord && currentRecord.derived && currentRecord.derived.baselineGap);
     ratingsState = {
       baseline: Object.assign({}, (d.ratings && d.ratings.baseline) || {}),
       post: Object.assign({}, (d.ratings && d.ratings.post) || {})
@@ -582,7 +586,7 @@
     document.querySelectorAll('input[name="pb-mode"]').forEach(function (r) {
       r.addEventListener("change", updateModeNote);
     });
-    ["pq-atEval", "pq-equipment", "pq-baseline"].forEach(function (id) {
+    ["pq-baseline"].forEach(function (id) {
       var cb = $(id);
       if (cb) cb.addEventListener("change", function () {
         if (window.PBRefreshReadiness) window.PBRefreshReadiness(collectDetails().prereqs);
