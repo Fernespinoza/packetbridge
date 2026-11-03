@@ -103,11 +103,20 @@
     parent.appendChild(ul);
     return ul;
   }
+  /* Every readout section is collapsible (Fernando, 2026-11-02): a
+     native <details> with the heading inside its <summary>, so the
+     heading stays navigable and the toggle is keyboard-operable with no
+     scripting. Sections start open — collapsing is the reader's choice. */
   function section(title, items) {
-    var frag = document.createDocumentFragment();
-    frag.appendChild(el("h2", title));
-    addList(frag, items);
-    return frag;
+    var det = document.createElement("details");
+    det.open = true;
+    var sum = el("summary");
+    sum.appendChild(el("h2", title));
+    det.appendChild(sum);
+    var body = document.createElement("div");
+    addList(body, items);
+    det.appendChild(body);
+    return det;
   }
   function val(v) { return (v === null || v === undefined || v === "") ? "— not found —" : v; }
 
@@ -137,7 +146,11 @@
     host.textContent = "";
     if (!window.PacketBridgeExtract.readiness) return;
     var r = window.PacketBridgeExtract.readiness(rec, prereqs);
-    host.appendChild(el("h2", "Ready to schedule?"));
+    var sum = el("summary");
+    sum.appendChild(el("h2", "Ready to schedule?"));
+    host.appendChild(sum);
+    var body = document.createElement("div");
+    host.appendChild(body);
     var marks = { pass: "✓ Pass", check: "⚠ Check", missing: "✗ Missing" };
     var ul = el("ul");
     r.items.forEach(function (it) {
@@ -151,8 +164,8 @@
       if (!pq.done) li.className = "missing-line";
       ul.appendChild(li);
     });
-    host.appendChild(ul);
-    host.appendChild(el("p", r.summary));
+    body.appendChild(ul);
+    body.appendChild(el("p", r.summary));
   }
   window.PBRefreshReadiness = function (prereqs) {
     lastPrereqs = prereqs || {};
@@ -176,7 +189,8 @@
     if (rec.derived && rec.derived.referralFlattened)
       frag.appendChild(el("p", "Note: the VR1884 in this packet is a flattened print, so its values were read from the printed text rather than from form fields — double-check them."));
     lastRecord = rec; lastPrereqs = {};
-    var readinessHost = document.createElement("div");
+    var readinessHost = document.createElement("details");
+    readinessHost.open = true;
     readinessHost.id = "readiness-block";
     fillReadiness(readinessHost, rec, lastPrereqs);
     frag.appendChild(readinessHost);
