@@ -6,6 +6,8 @@ PacketBridge reads a Texas Workforce Commission (TWC) assistive-technology refer
 
 **Live app:** https://fernespinoza.github.io/packetbridge/
 
+**Download (single file, works offline):** https://github.com/Fernespinoza/packetbridge/releases/latest/download/PacketBridge.html — always the latest release. [All releases](https://github.com/Fernespinoza/packetbridge/releases)
+
 ## Privacy model — read this first
 
 - The web page delivers only the *program*. All processing happens **in your browser, on your machine**, using JavaScript. There is no server, no backend, no account, and no analytics.
@@ -15,7 +17,7 @@ PacketBridge reads a Texas Workforce Commission (TWC) assistive-technology refer
 
 ## Status
 
-v0.1 — extraction + readout. It reads PDF packets (fillable VR1884 required; SA and EAS recommended) and renders the readout. Coming next: the report-details form (provider profile, sessions, assessment subjects/ratings) and one-click generation of the VR2868 and both VR2902s (Baseline + Post-Training).
+Full path working: referral in, readout (with per-fact source labels, conflict flags, and a Questions-for-the-counselor list), the report-details form, and one-click generation of the filled VR2868 and both VR2902s (Baseline + Post-Training). Partial packets are accepted — load any subset of the three files and the readout reports what is missing. Current release: see the download link above.
 
 Not yet supported: Word (.docx) packets, scanned/paper packets (no OCR), flattened (non-fillable) 1884s.
 
