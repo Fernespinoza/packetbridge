@@ -145,24 +145,47 @@
     if (rec.derived && rec.derived.referralFlattened)
       frag.appendChild(el("p", "Note: the VR1884 in this packet is a flattened print, so its values were read from the printed text rather than from form fields — double-check them."));
 
+    /* SA delivery instructions sometimes name who must deliver the
+       training. If that name matches neither the trainer nor the provider
+       in the saved profile, flag it — the profile lives on this device,
+       so the comparison happens here, not in the pure record code. */
+    var trainerFlag = null, trainerQuestion = null;
+    var namedBySA = au.instructionsTrainer || null;
+    if (namedBySA && window.PBDetails && window.PBDetails.collectProfile) {
+      var profT = window.PBDetails.collectProfile();
+      var who = ((profT.trainer || "") + " " + (profT.providerName || "")).toLowerCase();
+      var stopW = { the: 1, and: 1, for: 1, with: 1, inc: 1, llc: 1 };
+      var namedWords = namedBySA.toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2 && !stopW[w]; });
+      if (namedWords.length && who.trim() && !namedWords.some(function (w) { return who.indexOf(w) !== -1; })) {
+        trainerFlag = "⚠ SA delivery instructions name \"" + namedBySA + "\", which does not match the trainer/provider in your saved profile — confirm who should deliver this training.";
+        trainerQuestion = "The SA's delivery instructions name \"" + namedBySA + "\" — please confirm who should deliver this training.";
+      }
+    }
+
     var missingDocs = (rec.derived && rec.derived.missingDocuments) || [];
     var missingList = missingDocs.map(function (d) { return "⚠ Missing: " + d; });
     if (rec.derived && rec.derived.referralBlank)
       missingList.push("⚠ VR1884 Referral: the copy loaded appears to be unfilled — no customer, counselor, training topics, or delivery method on it.");
     if (rec.derived && rec.derived.baselineGap)
       missingList.push("⚠ Baseline VR2902: this SA funds a post-training assessment but no baseline. Ask the counselor: was a baseline VR2902 already completed (possibly under an earlier SA)? If so, request a copy — the post-training assessment should re-test the same subjects and tasks. If not, ask whether a baseline should be authorized before training begins.");
+    (rec.derived && rec.derived.dateFlags || []).forEach(function (f) { missingList.push(f.text); });
+    if (trainerFlag) missingList.push(trainerFlag);
     if (missingList.length) {
       var mSec = section("Missing from this packet", missingList);
       mSec.querySelectorAll("li").forEach(function (li) { li.className = "missing-line"; });
       frag.appendChild(mSec);
     }
-    /* One counselor-ready list: the missing items and the inconsistencies,
-       phrased as questions — what goes in the email or gets asked on the
-       call (Fernando's direction, 2026-11-02). */
-    var questions = window.PacketBridgeExtract.counselorQuestions
-      ? window.PacketBridgeExtract.counselorQuestions(rec) : [];
-    if (questions.length)
-      frag.appendChild(section("Questions for the counselor", questions));
+    /* Questions routed to the person who can actually answer them:
+       the counselor owns the case, the SA issuer owns the authorization,
+       and contact facts are asked of the customer directly (Fernando's
+       routing, 2026-11-02). */
+    var qGroups = window.PacketBridgeExtract.counselorQuestions
+      ? window.PacketBridgeExtract.counselorQuestions(rec) : { counselor: [], issuer: [], customer: [] };
+    var issuerQs = (qGroups.issuer || []).slice();
+    if (trainerQuestion) issuerQs.push(trainerQuestion);
+    if (qGroups.counselor.length) frag.appendChild(section("Questions for the counselor", qGroups.counselor));
+    if (issuerQs.length) frag.appendChild(section("Questions for the SA issuer", issuerQs));
+    if (qGroups.customer.length) frag.appendChild(section("Questions for the customer", qGroups.customer));
 
     var addrText = [c.address.street, c.address.city, ((c.address.state || "") + " " + (c.address.zip || "")).trim()].filter(Boolean).join(", ");
     var have = [
@@ -196,12 +219,16 @@
       line("Case ID: ", caseIdVal ? txt(caseIdVal + (caseIds.length > 1 ? " (from the " + caseIds[0] + "; also on the " + caseIds[1] + ")" : caseIds.length ? " (from the " + caseIds[0] + ")" : "")) : missSpan()),
       line("SA dates: issued ", piece(au.dateIssued, "SA"), ", runs ", piece(au.startDate, "SA"), " to ", piece(au.endDate, "SA"), ", total $", piece(au.totalCost, "SA")),
       line("Counselor office (from the SA): ", officeText ? txt(officeText) : missSpan()),
-      rec.twcContact ? "TWC contact listed on the SA (this is NOT the counselor): " + val(rec.twcContact.name) + ", " + val(rec.twcContact.phone) : null
+      rec.twcContact ? "TWC contact listed on the SA (this is NOT the counselor): " + val(rec.twcContact.name) + ", " + val(rec.twcContact.phone) : null,
+      missingDocs.indexOf("EAS Consultation Report") === -1 ? line("EAS consultation date: ", piece(rec.eas && rec.eas.consultDate, "EAS")) : null,
+      au.deliveryInstructions ? line("SA delivery instructions: ", txt(au.deliveryInstructions)) : null,
+      au.instructionsTrainer ? line("Trainer named in the SA's delivery instructions: ", txt(au.instructionsTrainer)) : null
     ];
     frag.appendChild(section("What we have — counselor and authorization", counselorItems));
 
     var trainingItems = [
       line("Service requested: ", piece(rec.referral.serviceRequested, "VR1884"), ", referral date ", piece(rec.referral.date, "VR1884")),
+      line("Trainer named on the referral: ", piece(rec.referral.trainerNamed, "VR1884")),
       line("Delivery method: ", piece(tr.deliveryMethod, "VR1884")),
       tr.locations.length ? line("Training location: ", txt(tr.locations.join("; ") + " (from the VR1884)")) : "Training location: none marked on the 1884",
       tr.deliveryComments ? "Delivery comments: " + tr.deliveryComments : null,

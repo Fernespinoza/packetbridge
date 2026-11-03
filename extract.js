@@ -173,8 +173,16 @@
       dateIssued: find(text, /Date Issued:\s*([\d/]+)/),
       startDate: find(text, /Start Date:\s*([\d/]+)/),
       endDate: find(text, /End Date:\s*([\d/]+)/),
-      totalCost: find(text, /Total Cost:\s*\$\s*([\d,]+)/)
+      totalCost: find(text, /Total Cost:\s*\$\s*([\d,]+)/),
+      deliveryInstructions: find(text, /Delivery Instructions:\s*([^\n]+)/)
     };
+    /* The SA's delivery instructions sometimes name who must deliver the
+       training ("provided by ..."). Surface that name so the readout can
+       flag it when it is not the trainer in the provider profile. A mere
+       "Per VR1884 dated ..." line names nobody and yields null. */
+    var diBy = auth.deliveryInstructions &&
+      /\b(?:provided|delivered|conducted|performed) by\s+([^.;]+)/i.exec(auth.deliveryInstructions);
+    auth.instructionsTrainer = diBy ? clean(diBy[1].replace(/\s+dated.*$/i, "")) : null;
     var m = text.match(/TWC CCS Name\/Number:\s*\n?\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*?)\s*\/\s*(\d+)/u);
     if (m) { auth.counselorName = clean(m[1]); auth.counselorCaseload = clean(m[2]); }
     var office = {
@@ -271,7 +279,7 @@
      both present (every check below already guards on both sides having a
      value), and derived.missingDocuments names the absent pieces so the
      readout can list them for the counselor. */
-  function buildRecord(fields1884, saText, easText, flat1884) {
+  function buildRecord(fields1884, saText, easText, flat1884, todayStr) {
     var record = {};
     var missingDocuments = [];
     if ((fields1884 === null || fields1884 === undefined) && !flat1884) missingDocuments.push("VR1884 Referral");
@@ -309,6 +317,41 @@
     ].forEach(function (row) {
       if (row[1] && row[2] && row[1].trim().toLowerCase() !== row[2].trim().toLowerCase())
         conflicts.push(row[0] + ": 1884 \"" + row[1] + "\" vs SA \"" + row[2] + "\"");
+    });
+
+    /* The remaining cross-checks (Fernando, 2026-11-02): diagnosis,
+       vocational goal, software, and visual fields compare by word
+       overlap like hardware does — rephrasings are not conflicts — while
+       the acuities compare exactly once spacing is normalized. */
+    function wordSet(t) { var o = {}; String(t).toLowerCase().split(/[^a-z0-9]+/).forEach(function (w) { if (w) o[w] = true; }); return o; }
+    function barelyOverlap(a, b) {
+      var A = wordSet(a), B = wordSet(b);
+      var shared = Object.keys(A).filter(function (w) { return B[w]; }).length;
+      var min = Math.min(Object.keys(A).length, Object.keys(B).length);
+      return min > 0 && shared / min < 0.5;
+    }
+    /* "Unknown" is a non-answer, not a competing claim (Samuel's EAS
+       lists the home software as "Unknown" while the 1884 names JAWS). */
+    function naLike(v) { return !v || /^n\/?a$/i.test(String(v).trim()) || /^unknown$/i.test(String(v).trim()); }
+    function textConflict(label, aVal, bVal) {
+      if (naLike(aVal) || naLike(bVal)) return;
+      if (String(aVal).trim().toLowerCase() === String(bVal).trim().toLowerCase()) return;
+      if (barelyOverlap(aVal, bVal))
+        conflicts.push(label + ": 1884 says \"" + aVal + "\", EAS says \"" + bVal + "\"");
+    }
+    textConflict("Diagnosis", c.diagnosis, e.visualDisability);
+    textConflict("Vocational goal", c.goal, e.goal);
+    textConflict("Software", c.currentSoftware, e.homeSoftware);
+    var easFieldParts = [e.fieldRestrictionOD, e.fieldRestrictionOS].filter(function (v) { return v && !naLike(v); });
+    var easFields = null;
+    if (easFieldParts.length === 2 && easFieldParts[0] !== easFieldParts[1])
+      easFields = "OD: " + easFieldParts[0] + "; OS: " + easFieldParts[1];
+    else if (easFieldParts.length) easFields = easFieldParts[0];
+    textConflict("Visual fields", c.visualFields, easFields);
+    [["Visual acuity OD", c.acuityOD, e.acuityOD], ["Visual acuity OS", c.acuityOS, e.acuityOS]].forEach(function (row) {
+      if (naLike(row[1]) || naLike(row[2])) return;
+      if (String(row[1]).toLowerCase().replace(/\s+/g, "") !== String(row[2]).toLowerCase().replace(/\s+/g, ""))
+        conflicts.push(row[0] + ": 1884 says \"" + row[1] + "\", EAS says \"" + row[2] + "\"");
     });
 
     /* Multi-source harvesting with provenance (Fernando's rule: check
@@ -389,6 +432,45 @@
     if (e.ocrSoftware) suggest("Optical Character Recognition", "EAS evaluations mention OCR software");
     var suggestedSubjects = Object.keys(sugg).sort().map(function (s) { return { subject: s, reason: sugg[s] }; });
 
+    /* Date checks (Fernando's rule, first noted 2026-10-29, confirmed
+       2026-11-02): surface the documents' dates, flag an SA whose window
+       has not started or has ended, and flag any document more than 6
+       months older than the SA. "Today" is injectable for tests. */
+    function parseMDY(v) {
+      var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(v || "").trim());
+      return m ? Date.UTC(+m[3], +m[1] - 1, +m[2]) : null;
+    }
+    var todayMs = parseMDY(todayStr);
+    if (todayMs === null) { var nowD = new Date(); todayMs = Date.UTC(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()); }
+    var DAY_MS = 86400000;
+    var saStartMs = parseMDY(record.authorization.startDate);
+    var saEndMs = parseMDY(record.authorization.endDate);
+    var saStatus = "unknown";
+    if (missingDocuments.indexOf("Service Authorization (SA)") !== -1) saStatus = "no-sa";
+    else if (saEndMs !== null && todayMs > saEndMs) saStatus = "expired";
+    else if (saStartMs !== null && todayMs < saStartMs) saStatus = "not-yet";
+    else if (saStartMs !== null || saEndMs !== null) saStatus = "current";
+    var dateFlags = [];
+    if (saStatus === "expired")
+      dateFlags.push({ kind: "sa-expired", text: "⚠ Date check: this SA expired on " + record.authorization.endDate + " — sessions after that date are not authorized under it." });
+    if (saStatus === "not-yet")
+      dateFlags.push({ kind: "sa-not-yet", text: "⚠ Date check: this SA does not start until " + record.authorization.startDate + " — sessions before that date are not authorized under it." });
+    var saRefMs = parseMDY(record.authorization.dateIssued) || saStartMs;
+    [["EAS", e.consultDate, "eas"], ["VR1884", record.referral.date, "referral"]].forEach(function (row) {
+      var docMs = parseMDY(row[1]);
+      if (docMs !== null && saRefMs !== null && (saRefMs - docMs) / DAY_MS > 183)
+        dateFlags.push({ kind: "stale-" + row[2], text: "⚠ Date check: the " + row[0] + " is dated " + row[1] + " — more than 6 months older than the SA (issued " + (record.authorization.dateIssued || record.authorization.startDate) + "). Information that old may no longer match the customer's situation; confirm it is still current." });
+    });
+    /* Authorized hours from the SA line items (the details form checks
+       planned session hours against these). */
+    var saHoursTraining = 0, saHoursAll = 0;
+    record.lineItems.forEach(function (i) {
+      if (i.unit !== "Hour") return;
+      var h = parseFloat(i.qty) || 0;
+      saHoursAll += h;
+      if (/Training/i.test(i.description) && !/Assessment/i.test(i.description)) saHoursTraining += h;
+    });
+
     var subj = subjectsFor(record.training.topics);
     var docs = [];
     record.lineItems.forEach(function (i) {
@@ -407,6 +489,10 @@
       baselineGap: docs.indexOf("VR2902 Post-Training") !== -1 && docs.indexOf("VR2902 Baseline") === -1,
       referralBlank: referralBlank,
       referralFlattened: !!flat1884,
+      dateFlags: dateFlags,
+      saStatus: saStatus,
+      docDates: { eas: e.consultDate || null, referral: record.referral.date || null, saIssued: record.authorization.dateIssued || null },
+      saHours: { training: saHoursTraining, allHours: saHoursAll },
       conflicts: conflicts,
       missingDocuments: missingDocuments,
       easGapFilled: gapFilled,
@@ -654,28 +740,48 @@
       .replace(/EAS \(older\) says/g, "the EAS says")
       .replace(/: 1884 "/g, ": the VR1884 says \"")
       .replace(/ vs SA "/g, " but the SA says \"")
-      .replace(/ vs EAS "/g, " but the EAS says \"");
+      .replace(/ vs EAS "/g, " but the EAS says \"")
+      .replace(/, EAS says/g, " but the EAS says");
     return "Please confirm which is correct — " + s;
   }
 
-  function counselorQuestions(record) {
-    var q = [];
+  function counselorQuestions(record, opts) {
+    opts = opts || {};
+    var groups = { counselor: [], issuer: [], customer: [] };
     var d = record.derived || {};
     var missing = d.missingDocuments || [];
-    missing.forEach(function (doc) { q.push("Please send the missing " + doc + "."); });
-    if (d.baselineGap)
-      q.push("Was a baseline VR2902 already completed (possibly under an earlier SA)? If so, please send a copy — the post-training assessment should re-test the same subjects and tasks. If not, should a baseline be authorized before training begins?");
+    missing.forEach(function (doc) { groups.counselor.push("Please send the missing " + doc + "."); });
     if (d.referralBlank)
-      q.push("Please send the completed VR1884 Referral — the copy in this packet is blank.");
+      groups.counselor.push("Please send the completed VR1884 Referral — the copy in this packet is blank.");
+    var prereqs = opts.prereqs || {};
+    if (d.baselineGap && !prereqs.baselineCopyReceived)
+      groups.counselor.push("Was a baseline VR2902 already completed (possibly under an earlier SA)? If so, please send a copy — the post-training assessment should re-test the same subjects and tasks. If not, should a baseline be authorized before training begins?");
+    (d.dateFlags || []).forEach(function (f) {
+      if (f.kind === "sa-expired")
+        groups.issuer.push("This SA expired on " + record.authorization.endDate + " — will a new authorization be issued, or will this one be extended?");
+      else if (f.kind === "sa-not-yet")
+        groups.issuer.push("This SA does not start until " + record.authorization.startDate + " — please confirm the start date is correct.");
+      else if (f.kind === "stale-eas")
+        groups.counselor.push("The EAS is dated " + record.eas.consultDate + " — more than 6 months older than this SA. Are its recommendations still current?");
+      else if (f.kind === "stale-referral")
+        groups.counselor.push("The VR1884 is dated " + record.referral.date + " — more than 6 months older than this SA. Is the referral information still current?");
+    });
     var noRef = missing.indexOf("VR1884 Referral") !== -1 || !!d.referralBlank;
     if (!noRef) {
-      if (!record.customer.name) q.push("What is the customer's full name? None of the documents in this packet give it.");
-      if (!record.customer.phone) q.push("What is the customer's phone number? It is not in this packet.");
-      if (!record.counselor.name) q.push("Who is the VR counselor for this case? The packet does not name one.");
-      if (!record.counselor.phone) q.push("What is the counselor's phone number? It is not in this packet.");
+      if (!record.customer.name) groups.counselor.push("What is the customer's full name? None of the documents in this packet give it.");
+      if (!record.counselor.name) groups.counselor.push("Who is the VR counselor for this case? The packet does not name one.");
+      if (!record.counselor.phone) groups.counselor.push("What is the counselor's phone number? It is not in this packet.");
+      if (!record.training.deliveryMethod) groups.counselor.push("Which delivery method is approved for this training (in person, remote, or a mix)? The packet does not say.");
+      if (!record.training.locations || !record.training.locations.length)
+        groups.counselor.push("Where should the training take place? No training location is marked in this packet.");
     }
-    (d.conflicts || []).forEach(function (c) { q.push(questionFromConflict(c)); });
-    return q;
+    /* The customer's own questions — asked directly at first contact. */
+    if (!record.customer.phone) groups.customer.push("What is the best phone number to reach you? It is not in this packet.");
+    if (!record.customer.bestDaysToContact) groups.customer.push("Which days and times work best for training sessions?");
+    if (!record.customer.address || !record.customer.address.street)
+      groups.customer.push("What is the best address for training?");
+    (d.conflicts || []).forEach(function (c) { groups.counselor.push(questionFromConflict(c)); });
+    return groups;
   }
 
   /* Document self-identification (Fernando's direction, 2026-11-02, after
