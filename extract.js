@@ -487,7 +487,14 @@
   function isFlat1884Text(text) {
     if (!text) return false;
     var t = normalizeText(text);
-    return /VR1884/.test(t) && /Training Topics?/.test(t) && /Service Requested/.test(t);
+    /* The referral's printed title — present on real flattened VR1884s
+       (e.g. the TWC-system print "VR1884 (08/25) Assistive Technology
+       Services for Customers with Visual Impairments Referral"), absent
+       from every SA and EAS checked. An earlier version required the
+       words "Training Topic", which the printed form never uses — its
+       topics are headed "AT Training Guide Topics" — so the real
+       flattened referral fell through to "does not match". */
+    return /VR1884/.test(t) && /Assistive Technology Services for Customers/.test(t);
   }
 
   var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text };
