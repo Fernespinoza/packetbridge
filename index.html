@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Privacy, enforced: the only network this page may touch is its own
+     origin (program files + template fallback). No uploads, no third
+     parties — anything else is blocked by the browser, not just by policy. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; font-src 'self' data:; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#14532d">
 <link rel="manifest" href="manifest.webmanifest">
@@ -128,6 +132,10 @@
     <h4>Session log (up to 14 sessions)</h4>
     <div id="sessions-list"></div>
     <p><button type="button" id="add-session">Add a session</button></p>
+    <div class="fld"><label for="dt-equipmentUsed">Equipment used in this training</label>
+      <input type="text" id="dt-equipmentUsed"></div>
+    <div class="fld"><label for="dt-softwareUsed">Software used in this training</label>
+      <input type="text" id="dt-softwareUsed"></div>
     <div class="fld"><label for="dt-problems">Software or hardware problems encountered</label>
       <textarea id="dt-problems" rows="3"></textarea></div>
     <div class="fld"><label for="dt-effectiveness">Training effectiveness</label>
@@ -176,7 +184,7 @@
   <section aria-labelledby="next-h">
     <h2 id="next-h">Coming next</h2>
     <p>PacketBridge now covers the full path: referral in, readout, report form, and the filled report packet out. Remaining work is hardening against more real-world packet variations.</p>
-    <p class="version">PacketBridge v0.7.3 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Partial packets accepted: load any of the three referral files and the readout lists what's missing. Every fact in the readout is labeled with the document it came from; missing info is highlighted yellow and conflicts red. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+    <p class="version">PacketBridge v0.8.0 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Partial packets accepted: load any of the three referral files and the readout lists what's missing. Every fact in the readout is labeled with the document it came from; missing info is highlighted yellow and conflicts red. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
   </section>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>

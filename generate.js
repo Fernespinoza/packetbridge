@@ -110,6 +110,18 @@
     return { fields: fields, warnings: warnings };
   }
 
+  /* The VR2868 radio options are exactly: "Only in person", "Only remotely",
+     "In person and/or remote as dependent on customer's needs". The 1884's
+     labels matched on every packet tested, but map explicitly so a variant
+     label lands on the right option instead of a "could not set" note. */
+  function normalizeDelivery(v) {
+    var s = String(v).toLowerCase();
+    if (/remote/.test(s) && /person/.test(s)) return "In person and/or remote as dependent on customer's needs";
+    if (/remote/.test(s)) return "Only remotely";
+    if (/person/.test(s)) return "Only in person";
+    return v;
+  }
+
   function build2868(record, profile, details) {
     var warnings = [];
     var fields = {};
@@ -157,11 +169,14 @@
       return t.description ? (t.label + " — " + t.description) : t.label;
     });
     text("Training Objectives", objectives.join("\n"));
-    text("Equipment Used in This Training Session", record.customer.currentHardware);
-    text("Software Used in This Training Session", record.customer.currentSoftware);
+    /* "Used in This Training Session" is what the TRAINER used — entered on
+       the form. It is NOT copied from the customer's own hardware/software
+       on the referral (that is what the customer owns, a different fact). */
+    text("Equipment Used in This Training Session", details.equipmentUsed);
+    text("Software Used in This Training Session", details.softwareUsed);
 
     if (record.training.deliveryMethod)
-      fields["Services were facilitated"] = { t: "radio", v: record.training.deliveryMethod };
+      fields["Services were facilitated"] = { t: "radio", v: normalizeDelivery(record.training.deliveryMethod) };
 
     var sessions = details.sessions.filter(function (s) { return s.date || s.hours || s.description; });
     if (!sessions.length) warnings.push("No sessions entered — all 14 service rows are N/A.");
@@ -343,6 +358,14 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     var btn = document.getElementById("generate-btn");
-    if (btn) btn.addEventListener("click", generate);
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      /* Guard against double-clicks: three downloads in a row are easy to
+         duplicate, and some browsers block repeated programmatic downloads.
+         The button stays disabled until generation finishes either way. */
+      if (btn.disabled) return;
+      btn.disabled = true;
+      Promise.resolve(generate()).finally(function () { btn.disabled = false; });
+    });
   });
 })(typeof window !== "undefined" ? window : globalThis);

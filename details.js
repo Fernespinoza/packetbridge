@@ -9,9 +9,14 @@
 (function (global) {
   "use strict";
 
-  var SUBJECTS_ALL = ["Screen Reader", "Microsoft Windows", "Microsoft Word",
-    "Microsoft Excel", "Microsoft Outlook", "Microsoft PowerPoint",
-    "Internet", "Email", "Keyboard Knowledge"];
+  var SUBJECTS_ALL = ["Screen Reader", "Screen Magnification", "Microsoft Windows",
+    "Microsoft Word", "Microsoft Excel", "Internet", "Notetaker",
+    "Optical Character Recognition", "Keyboard Knowledge"];
+  /* ^ The subjects that exist on the VR2902 (checkbox + task section), in
+     canonical form. Locked to tasks-data.js and generate.js by
+     test/test-subjects.js — the extractor must emit exactly these names.
+     (Email / Outlook / PowerPoint are 1884 training topics but have no
+     VR2902 subject; they surface as notes, not checkboxes.) */
   var MAX_SESSIONS = 14; /* the VR2868 has exactly 14 service rows */
   var PROFILE_KEY = "packetbridge.profile.v1";
 
@@ -50,6 +55,8 @@
       sessions: [blankSession()],
       problems: "",
       effectiveness: "",
+      equipmentUsed: "", /* VR2868 "Equipment Used in This Training Session" — what the TRAINER used, entered by hand; never copied from the customer's own hardware */
+      softwareUsed: "",
       additionalNeeds: "",
       followUp: "", /* "" | "Short" | "Long" — VR2868 follow-up period radio */
       subjects: subjects,
@@ -229,6 +236,8 @@
       var list = collectSessions();
       list.splice(idx, 1);
       renderSessions(list.length ? list : [blankSession()]);
+      setDetailsStatus("Session " + (idx + 1) + " removed.");
+      focusSessionDate(idx);
     });
     fs.appendChild(rm);
     return fs;
@@ -237,6 +246,16 @@
     var host = $("sessions-list");
     host.innerHTML = "";
     sessions.forEach(function (s, i) { host.appendChild(sessionRow(s, i)); });
+  }
+  /* renderSessions rebuilds the list, which drops keyboard/screen-reader
+     focus to the top of the page. Put focus back on a sensible date field:
+     the row that took the removed row's place, or the newly added row. */
+  function focusSessionDate(idx) {
+    var rows = $("sessions-list").querySelectorAll(".session-row");
+    if (!rows.length) return;
+    var row = rows[Math.max(0, Math.min(idx, rows.length - 1))];
+    var d = row && row.querySelector('[data-role="date"]');
+    if (d) d.focus();
   }
   function collectSessions() {
     var out = [];
@@ -297,7 +316,7 @@
     ["", "0", "1", "2"].forEach(function (v) {
       var o = document.createElement("option");
       o.value = v;
-      o.textContent = v === "" ? "—" : v;
+      o.textContent = v === "" ? "Not rated" : v;
       sel.appendChild(o);
     });
     sel.value = ratingsState[phase][task.field] || "";
@@ -426,6 +445,8 @@
       sessions: collectSessions(),
       problems: $("dt-problems").value.trim(),
       effectiveness: $("dt-effectiveness").value.trim(),
+      equipmentUsed: $("dt-equipmentUsed").value.trim(),
+      softwareUsed: $("dt-softwareUsed").value.trim(),
       additionalNeeds: $("dt-additionalNeeds").value.trim(),
       followUp: $("dt-followUp").value,
       subjects: collectSubjectsOnly(),
@@ -439,6 +460,8 @@
     $("dt-postAssessmentDate").value = d.postAssessmentDate || "";
     $("dt-problems").value = d.problems || "";
     $("dt-effectiveness").value = d.effectiveness || "";
+    $("dt-equipmentUsed").value = d.equipmentUsed || "";
+    $("dt-softwareUsed").value = d.softwareUsed || "";
     $("dt-additionalNeeds").value = d.additionalNeeds || "";
     $("dt-followUp").value = d.followUp || "";
     SUBJECTS_ALL.forEach(function (s) {
@@ -482,6 +505,8 @@
       if (list.length >= MAX_SESSIONS) { setDetailsStatus("That's all " + MAX_SESSIONS + " session rows — the VR2868 has no more."); return; }
       list.push(blankSession());
       renderSessions(list);
+      setDetailsStatus("Session " + list.length + " added.");
+      focusSessionDate(list.length - 1);
     });
     document.querySelectorAll('input[name="pb-mode"]').forEach(function (r) {
       r.addEventListener("change", updateModeNote);

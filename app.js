@@ -220,7 +220,7 @@
       stillMissing.push("Your provider profile (entered once, reused every packet): provider name, address, phone, fax, email, and trainer name.");
     stillMissing.push(
       "For this packet: the report date, and the assessment date for the VR2902s.",
-      "From the training itself: session dates, hours, and descriptions for the VR2868; what was covered, any software or hardware problems, and training effectiveness.",
+      "From the training itself: session dates, hours, and descriptions for the VR2868; the equipment and software used in the training; what was covered, any software or hardware problems, and training effectiveness.",
       "Assessment ratings for the VR2902s — or leave them blank in Prep mode and fill them after the assessment.",
       "Stays blank by design: signatures and dates signed, the director block, and all VR staff verification fields."
     );

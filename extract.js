@@ -153,7 +153,7 @@
     var auth = {
       number: find(text, /Service Authorization Number:\s*(\d+)/),
       caseId: find(text, /Case ID:\s*\n?\s*(\d+)/),
-      customerName: find(text, /Customer Name:\s*\n?\s*([A-Z][A-Za-z ]+)/),
+      customerName: find(text, /Customer Name:\s*\n?\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*)/u),
       contractNumber: find(text, /Contract Number:\s*(\S+)/),
       vendorNumber: find(text, /Vendor Number:\s*(\S+)/),
       dateIssued: find(text, /Date Issued:\s*([\d/]+)/),
@@ -161,15 +161,23 @@
       endDate: find(text, /End Date:\s*([\d/]+)/),
       totalCost: find(text, /Total Cost:\s*\$\s*([\d,]+)/)
     };
-    var m = text.match(/TWC CCS Name\/Number:\s*\n?\s*([A-Za-z ]+?)\s*\/\s*(\d+)/);
+    var m = text.match(/TWC CCS Name\/Number:\s*\n?\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*?)\s*\/\s*(\d+)/u);
     if (m) { auth.counselorName = clean(m[1]); auth.counselorCaseload = clean(m[2]); }
     var office = {
       name: find(text, /Invoice To: Vocational Rehabilitation Services\s*\n([^\n]+)/),
       street: stripTrailingComma(find(text, /Invoice To: Vocational Rehabilitation Services\s*\n[^\n]+\n([^\n]+)/)),
       cityLine: find(text, /Invoice To: Vocational Rehabilitation Services\s*\n[^\n]+\n[^\n]+\n([^\n]+)/)
     };
+    /* The VR2868 wants the counselor office city/state/ZIP as separate
+       fields; the SA prints them as one line ("Lubbock, TX 79401"). */
+    var cityParts = /^(.*?),\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/.exec(office.cityLine || "");
+    if (cityParts) {
+      office.city = clean(cityParts[1]);
+      office.state = cityParts[2].toUpperCase();
+      office.zip = cityParts[3];
+    }
     var twcContact = {
-      name: find(text, /TWC Contact Name:\s*([A-Za-z ]+)/),
+      name: find(text, /TWC Contact Name:\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*)/u),
       phone: normPhone(find(text, new RegExp("Contact Phone No:\\s*" + PHONE_RE))),
       email: find(text, /Contact Email:\s*(\S+)/)
     };
@@ -185,11 +193,11 @@
   function parseEAS(rawText) {
     var text = normalizeText(rawText);
     return { eas: {
-      reportFor: find(text, /EAS Consultation Report for:\s*([A-Za-z ]+)/),
+      reportFor: find(text, /EAS Consultation Report for:\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*)/u),
       consultDate: find(text, /Consultation Date:\s*([\d/]+)/),
       caseId: find(text, /Case ID:\s*(\d+)/),
-      vrc: find(text, /VR Counselor:\s*([A-Za-z ]+)/),
-      easName: find(text, /EAS Initial Consultation Report Prepared by:\s*([A-Za-z ]+)/),
+      vrc: find(text, /VR Counselor:\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*)/u),
+      easName: find(text, /EAS Initial Consultation Report Prepared by:\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*)/u),
       goal: find(text, /Vocational \(IPE\) Goal:\s*([^\n]+)/),
       visualDisability: find(text, /Visual Disability:\s*([^\n]+)/),
       acuityOD: find(text, /Visual Acuities OD:\s*(\S+)/),
@@ -233,8 +241,8 @@
       else if (t.topic === "The Word Processor") subjects["Microsoft Word"] = true;
       else if (t.topic === "Key Boarding Skills") subjects["Keyboard Knowledge"] = true;
       else if (t.topic === "The Internet and the World Wide Web") subjects["Internet"] = true;
-      else if (t.topic === "Viewing and Creating Spreadsheets using Microsoft Excel") subjects["Spreadsheet"] = true;
-      else if (t.topic.indexOf("OCR Software") === 0) subjects["Optical Character Recognition (OCR)"] = true;
+      else if (t.topic === "Viewing and Creating Spreadsheets using Microsoft Excel") subjects["Microsoft Excel"] = true;
+      else if (t.topic.indexOf("OCR Software") === 0) subjects["Optical Character Recognition"] = true;
       else if (t.topic === "Braille Note Takers") subjects["Notetaker"] = true;
       else if (t.topic === "Operating Feature Function and Maintenance") subjects["Microsoft Windows"] = true;
       else if (t.topic === "Computer Skills and Mobile Operating System Skills Post Training Assessments") { /* signals post 2902 */ }
@@ -346,14 +354,14 @@
     if (e.trainingNeedsText) {
       e.trainingNeedsText.split(/,| and /).map(function (s) { return s.trim(); }).filter(Boolean)
         .forEach(function (need) {
-          if (/excel|spreadsheet/i.test(need)) suggest("Spreadsheet", "EAS training need: " + need);
+          if (/excel|spreadsheet/i.test(need)) suggest("Microsoft Excel", "EAS training need: " + need);
           else if (/internet/i.test(need)) suggest("Internet", "EAS training need: " + need);
           else if (/computer access/i.test(need)) suggest("Microsoft Windows", "EAS training need: " + need);
           else if (/microsoft word|\bword\b/i.test(need)) suggest("Microsoft Word", "EAS training need: " + need);
           else suggNotes.push("No VR2902 subject exists for EAS training need: " + need + " (objective text only)");
         });
     }
-    if (e.ocrSoftware) suggest("Optical Character Recognition (OCR)", "EAS evaluations mention OCR software");
+    if (e.ocrSoftware) suggest("Optical Character Recognition", "EAS evaluations mention OCR software");
     var suggestedSubjects = Object.keys(sugg).sort().map(function (s) { return { subject: s, reason: sugg[s] }; });
 
     var subj = subjectsFor(record.training.topics);
