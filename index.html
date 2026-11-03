@@ -108,12 +108,13 @@
     <div id="profile-fields"></div>
 
     <fieldset>
-      <legend>Mode</legend>
-      <div><input type="radio" name="pb-mode" id="mode-prep" value="prep" checked>
-        <label for="mode-prep">Prep — headers and subjects only, assessment ratings left blank</label></div>
-      <div><input type="radio" name="pb-mode" id="mode-complete" value="complete">
-        <label for="mode-complete">Complete — include assessment ratings</label></div>
-      <p id="ratings-note" hidden>Rating scale, straight from the form: <strong>0</strong> = could not
+      <legend>How the assessments stage themselves</legend>
+      <p>There is no prep/complete switch. Pick the assessment subjects below and rate the baseline;
+        the post-training grids stay locked until the baseline has its first rating — that is the
+        order the service runs (baseline, then training, then post-training). Generate whenever you
+        like: an assessment with ratings comes out filled, and one without comes out as a blank
+        prep sheet. Each assessment decides on its own.</p>
+      <p id="ratings-note">Rating scale, straight from the form: <strong>0</strong> = could not
         complete the task, <strong>1</strong> = completed with assistance (prompting or hints),
         <strong>2</strong> = completed without assistance. Scores add themselves up as you rate.
         Leave a task blank if it wasn't assessed.</p>
@@ -131,7 +132,7 @@
       <input type="date" id="dt-assessmentDate"></div>
     <h4>Assessment subjects (applies to both VR2902s)</h4>
     <div id="subjects-list"></div>
-    <div id="ratings-baseline-wrap" hidden>
+    <div id="ratings-baseline-wrap">
       <h4>Baseline ratings</h4>
       <div id="ratings-baseline"></div>
     </div>
@@ -162,8 +163,10 @@
     <h3>VR2902 — Post-training assessment</h3>
     <div class="fld"><label for="dt-postAssessmentDate">Post-training assessment date</label>
       <input type="date" id="dt-postAssessmentDate"></div>
-    <div id="ratings-post-wrap" hidden>
+    <div id="ratings-post-wrap">
       <h4>Post-training ratings</h4>
+      <p id="ratings-post-lock">Locked for now: the post-training assessment comes after the baseline.
+        Rate at least one baseline task above and these grids open.</p>
       <div id="ratings-post"></div>
     </div>
 
@@ -179,9 +182,10 @@
   <details id="generate-section" open>
     <summary><h2 id="gen-h">4. Generate the report packet</h2></summary>
     <p>Builds the three filled PDFs from the packet you read and the details you entered, in packet
-       order: <strong>VR2902 Baseline, VR2868, VR2902 Post-Training</strong>. In Prep mode the
-       assessment ratings and scores stay blank and unassessed subjects are marked N/A, matching the
-       course shells. In Complete mode your ratings and their automatic scores are filled in.
+       order: <strong>VR2902 Baseline, VR2868, VR2902 Post-Training</strong>. Each assessment is
+       filled from its own ratings: an assessment you have rated comes out completed, and one you
+       have not comes out as a blank prep sheet with unassessed subjects marked N/A, matching the
+       course shells.
        Signatures are always left blank — those are signed by hand. Before filling, each template's
        fingerprint is checked against the revision it was verified from; if the file does not match,
        generation stops instead of filling a wrong or damaged form. The PDFs are generated on this computer and download straight to
@@ -210,7 +214,7 @@
     <p id="tpl-status" role="status" aria-live="polite"></p>
   </details>
 
-  <p class="version">PacketBridge v0.17.0</p>
+  <p class="version">PacketBridge v0.18.0</p>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>
 <script src="lib/pdf.min.js"></script>

@@ -74,7 +74,13 @@
     fields["Assessment Type"] = { t: "radio", v: phase === "baseline" ? "Baseline Assessment" : "Post-Training Assessment" };
 
     var ratings = (details.ratings && details.ratings[phase]) || {};
-    var complete = details.mode === "complete";
+    /* The gated flow (Fernando, 2026-11-03 — point 2): there is no
+       Prep/Complete switch anymore. Each assessment fills iff it has
+       ratings: a phase with ratings comes out completed, a phase with
+       none comes out as a blank prep sheet. The two phases decide
+       independently — a filled baseline with an untouched post is the
+       normal mid-service state. */
+    var complete = Object.keys(ratings).some(function (k) { return !!ratings[k]; });
 
     details.subjects.forEach(function (s) {
       if (SUBJECT_CHECKBOX[s]) check(SUBJECT_CHECKBOX[s]);

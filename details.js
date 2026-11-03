@@ -48,7 +48,6 @@
       subjects = record.derived.suggestedSubjects.map(function (s) { return s.subject; });
     }
     return {
-      mode: "prep", /* "prep" = ratings blank | "complete" = ratings entered */
       reportDate: todayISO(),
       assessmentDate: "",
       postAssessmentDate: "",
@@ -160,19 +159,29 @@
       if (guardTripped)
         warnings.push("Authorization problems like these are fixed with an SA amendment — ask the SA issuer (the TWC contact named on the SA) to amend the authorized hours or dates.");
     }
-    if (d.mode === "complete" && sections) {
+    /* Sequence checks the gated flow makes possible (2026-11-03): a
+       subject rated in NEITHER phase generates as an unrated prep
+       subject (worth flagging), and post ratings with no baseline break
+       the assessment order — a post score without a baseline has nothing
+       to compare against. */
+    if (sections) {
       d.subjects.forEach(function (subj) {
         var sec = sectionForSubject(sections, subj);
         if (!sec) return;
-        var any = false;
+        var anyBase = false, anyPost = false;
         sec.groups.forEach(function (g) {
           g.tasks.forEach(function (t) {
-            if ((d.ratings.baseline && d.ratings.baseline[t.field]) ||
-                (d.ratings.post && d.ratings.post[t.field])) any = true;
+            if (d.ratings.baseline && d.ratings.baseline[t.field]) anyBase = true;
+            if (d.ratings.post && d.ratings.post[t.field]) anyPost = true;
           });
         });
-        if (!any) warnings.push("Complete mode: no ratings entered yet for " + subj + ".");
+        if (!anyBase && !anyPost)
+          warnings.push(subj + " is selected but has no ratings in either assessment — it will be generated as an unrated subject.");
+        else if (anyPost && !anyBase)
+          warnings.push(subj + " has post-training ratings but no baseline ratings — the baseline is assessed first; a post-training score without a baseline has nothing to compare against.");
       });
+      if (d.assessmentDate && d.postAssessmentDate && d.postAssessmentDate < d.assessmentDate)
+        warnings.push("The post-training assessment date (" + d.postAssessmentDate + ") is before the baseline assessment date (" + d.assessmentDate + ") — the post-training assessment happens after the baseline.");
     }
     return warnings;
   }
@@ -392,6 +401,7 @@
       if (sel.value) ratingsState[phase][task.field] = sel.value;
       else delete ratingsState[phase][task.field];
       refreshScoreSpans();
+      if (phase === "baseline") renderPostGate();
     });
     row.appendChild(lab);
     row.appendChild(sel);
@@ -459,6 +469,7 @@
           inp.addEventListener("change", function () {
             if (inp.value) ratingsState[phase][wf] = inp.value; else delete ratingsState[phase][wf];
             refreshScoreSpans();
+            if (phase === "baseline") renderPostGate();
           });
           fs.appendChild(field(wf, inp));
         });
@@ -473,16 +484,32 @@
     });
   }
 
+  /* The gated flow (Fernando, 2026-11-03 — point 2): no Prep/Complete
+     toggle. The baseline grids are always available once subjects are
+     picked; the post-training grids stay locked until the baseline has
+     its first rating (or a loaded draft already has post ratings) —
+     that is the order the service actually runs. */
+  function anyRatings(phase) { return Object.keys(ratingsState[phase] || {}).length > 0; }
+  function postUnlocked() { return anyRatings("baseline") || anyRatings("post"); }
+  function renderPostGate() {
+    var pw = $("ratings-post-wrap"), lock = $("ratings-post-lock"), host = $("ratings-post");
+    if (!pw || !host) return;
+    pw.hidden = false;
+    if (postUnlocked()) {
+      if (lock) lock.hidden = true;
+      renderPhase("post", host);
+    } else {
+      if (lock) lock.hidden = false;
+      host.innerHTML = "";
+    }
+    refreshScoreSpans();
+  }
   function renderRatings() {
-    var complete = document.querySelector('input[name="pb-mode"]:checked').value === "complete";
     var bw = $("ratings-baseline-wrap"), pw = $("ratings-post-wrap");
     if (!bw || !pw) return;
-    bw.hidden = !complete;
-    pw.hidden = !complete;
-    if (!complete) return;
+    bw.hidden = false;
     renderPhase("baseline", $("ratings-baseline"));
-    renderPhase("post", $("ratings-post"));
-    refreshScoreSpans();
+    renderPostGate();
   }
 
   function collectSubjectsOnly() {
@@ -503,7 +530,6 @@
       });
     });
     return {
-      mode: document.querySelector('input[name="pb-mode"]:checked').value,
       reportDate: $("dt-reportDate").value,
       assessmentDate: $("dt-assessmentDate").value,
       postAssessmentDate: $("dt-postAssessmentDate").value,
@@ -522,7 +548,6 @@
     };
   }
   function fillDetails(d) {
-    document.querySelector('input[name="pb-mode"][value="' + (d.mode === "complete" ? "complete" : "prep") + '"]').checked = true;
     $("dt-reportDate").value = d.reportDate || "";
     $("dt-assessmentDate").value = d.assessmentDate || "";
     $("dt-postAssessmentDate").value = d.postAssessmentDate || "";
@@ -548,11 +573,6 @@
     if (typeof window !== "undefined" && window.PBRefreshReadiness)
       window.PBRefreshReadiness(d.prereqs || {});
     renderSessions(d.sessions && d.sessions.length ? d.sessions : [blankSession()]);
-    updateModeNote();
-  }
-  function updateModeNote() {
-    var complete = document.querySelector('input[name="pb-mode"]:checked').value === "complete";
-    $("ratings-note").hidden = !complete;
     renderRatings();
   }
   function setDetailsStatus(msg) { $("details-status").textContent = msg; }
@@ -582,9 +602,6 @@
       renderSessions(list);
       setDetailsStatus("Session " + list.length + " added.");
       focusSessionDate(list.length - 1);
-    });
-    document.querySelectorAll('input[name="pb-mode"]').forEach(function (r) {
-      r.addEventListener("change", updateModeNote);
     });
     ["pq-baseline"].forEach(function (id) {
       var cb = $(id);
