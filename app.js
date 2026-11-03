@@ -271,7 +271,7 @@
     }
     stagedNotes.forEach(function (n) {
       var li = document.createElement("li");
-      li.textContent = "✗ " + n;
+      li.textContent = "✗ " + n.text;
       host.appendChild(li);
     });
   }
@@ -292,12 +292,12 @@
         if (!kind && text && (!fields || Object.keys(fields).length === 0) && /VR1884/.test(text)) {
           /* A referral with no fillable fields at all: flattened/scanned. */
           if (!flat1884Name && !staged["1884"]) flat1884Name = file.name;
-          else stagedNotes.push(file.name + " — another flattened VR1884; only one can be used");
+          else stagedNotes.push({ name: file.name, text: file.name + " — another flattened VR1884; only one can be used" });
           continue;
         }
       }
-      if (!kind) { stagedNotes.push(file.name + " — could not identify this document; it will not be loaded"); continue; }
-      if (staged[kind]) { stagedNotes.push(file.name + " — also looks like the " + KIND_LABEL[kind] + "; keeping " + staged[kind].name); continue; }
+      if (!kind) { stagedNotes.push({ name: file.name, text: file.name + " — does not match any of the three expected forms (VR1884 Referral, Service Authorization, EAS Consultation Report); it will not be loaded" }); continue; }
+      if (staged[kind]) { stagedNotes.push({ name: file.name, text: file.name + " — also looks like the " + KIND_LABEL[kind] + "; keeping " + staged[kind].name }); continue; }
       staged[kind] = { name: file.name, fields: fields, text: text };
     }
     renderStaged();
@@ -333,7 +333,9 @@
     if (!Object.keys(staged).length) {
       setStatus(flat1884Name
         ? "That 1884 has no fillable form fields — it may be a flattened or scanned copy. PacketBridge needs the fillable PDF."
-        : "No files picked yet — choose or drop at least one packet file (the VR1884, the SA, or the EAS), then read the packet.");
+        : stagedNotes.length
+          ? "None of the files you picked match the three expected forms (VR1884 Referral, Service Authorization, or EAS Consultation Report), so there is nothing to read yet."
+          : "No files picked yet — choose or drop at least one packet file (the VR1884, the SA, or the EAS), then read the packet.");
       return;
     }
     setStatus("Reading packet…");
@@ -346,7 +348,8 @@
       if (window.PBDetails && window.PBDetails.onRecord) window.PBDetails.onRecord(record);
       var missingDocs = (record.derived && record.derived.missingDocuments) || [];
       setStatus("Done. Readout is below" + (missingDocs.length ? " — note: this packet was read without " + missingDocs.join(", ") + "; the readout lists what is missing." : ".") +
-        (flat1884Name ? " (The VR1884 file " + flat1884Name + " could not be read — it has no fillable form fields.)" : ""));
+        (flat1884Name ? " (The VR1884 file " + flat1884Name + " could not be read — it has no fillable form fields.)" : "") +
+        (stagedNotes.length ? " Not loaded: " + stagedNotes.map(function (n) { return n.name; }).join(", ") + " — see the file list above for why." : ""));
       document.getElementById("readout-h").setAttribute("tabindex", "-1");
       document.getElementById("readout-h").focus({ preventScroll: false });
     } catch (err) {
