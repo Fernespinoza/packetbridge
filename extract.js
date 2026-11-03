@@ -936,13 +936,24 @@
      time in generate.js; the referral's revision is read from the form's
      own printed title and flagged when it is not the known one. */
   var FORM_REVISIONS = { vr1884: "08/25", vr2868: "08/2025", vr2902: "06/2022", verified: "2026-11-02", catalog: "https://www.twc.texas.gov/programs/vocational-rehabilitation/forms" };
+  /* The revision printed on a report template ("VR2868 (08/25)",
+     "VR 2902 (06/22)" — note the space in the 2902's title block), read
+     from the template's own text. Returns "MM/YY" or null. Used by the
+     use-your-own-forms override so the program can show the trainer
+     exactly which revision they provided. */
+  function templateRevision(text, formId) {
+    if (!text || !formId) return null;
+    var num = formId.replace(/\D/g, "");
+    var m = normalizeText(text).match(new RegExp("VR\\s?" + num + " \\((\\d{2}\\/\\d{2})\\)"));
+    return m ? m[1] : null;
+  }
   function referralRevision(text) {
     if (!text) return null;
     var m = normalizeText(text).match(/VR1884 \((\d{2}\/\d{2})\)/);
     return m ? m[1] : null;
   }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness, FORM_REVISIONS: FORM_REVISIONS, referralRevision: referralRevision };
+  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness, FORM_REVISIONS: FORM_REVISIONS, referralRevision: referralRevision, templateRevision: templateRevision };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);

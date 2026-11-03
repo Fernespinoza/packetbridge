@@ -268,8 +268,18 @@
     return bytes;
   }
 
+  /* Use-your-own-forms override (Fernando, 2026-11-02 — the hybrid):
+     the bundled templates are the default; a trainer who has downloaded
+     the current blank forms from TWC can load them in the Generate
+     section and they take over for the rest of the page session. Each
+     upload is fingerprint-checked before acceptance and its printed
+     revision is shown back — from that point the form's currency is the
+     provider's responsibility, which is where TWC's rule puts it. */
+  var userTemplates = {};      // templateId -> Uint8Array
+  var userTemplateRevs = {};   // templateId -> "MM/YY" or null
   var templateCache = {};
   async function loadTemplate(templateId, force) {
+    if (userTemplates[templateId]) return userTemplates[templateId];
     if (force) delete templateCache[templateId];
     if (templateCache[templateId]) return templateCache[templateId];
     var bytes;
@@ -350,6 +360,11 @@
       var guardWarnings = (window.PacketBridgeDetails && window.PacketBridgeDetails.validateDetails)
         ? window.PacketBridgeDetails.validateDetails(details, tasksData ? tasksData.sections : null, record) : [];
       var notes = packet.warnings.slice().concat(guardWarnings);
+      ["vr2868", "vr2902"].forEach(function (tid) {
+        if (userTemplates[tid])
+          notes.push("The " + tid.toUpperCase() + " was generated on the form you provided (printed revision " +
+            (userTemplateRevs[tid] || "unreadable") + "), not the bundled template.");
+      });
       for (var i = 0; i < packet.docs.length; i++) {
         var doc = packet.docs[i];
         var tpl = await loadTemplate(doc.template);
@@ -384,6 +399,18 @@
     var ids = ["vr2868", "vr2902"];
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i], label = id.toUpperCase(), rev = id === "vr2868" ? fr.vr2868 : fr.vr2902;
+      if (userTemplates[id]) {
+        try {
+          var ub = userTemplates[id];
+          var updf = await window.PDFLib.PDFDocument.load(ub);
+          var unames = updf.getForm().getFields().map(function (f) { return f.getName(); });
+          var uprob = checkTemplate(id, unames);
+          lines.push(uprob
+            ? label + " (the form you loaded, rev " + (userTemplateRevs[id] || "unreadable") + "): PROBLEM — " + uprob
+            : label + " (the form you loaded, rev " + (userTemplateRevs[id] || "unreadable") + "): fingerprint OK (" + unames.length + " fields) — this override, not the bundled template, will be used.");
+        } catch (ue) { lines.push(label + " (the form you loaded): could not be rechecked — " + (ue && ue.message ? ue.message : ue)); }
+        continue;
+      }
       try {
         var bytes = await loadTemplate(id, true);
         var pdf = await window.PDFLib.PDFDocument.load(bytes);
@@ -406,6 +433,53 @@
     if (rbtn) rbtn.addEventListener("click", function () {
       var st = document.getElementById("recheck-status");
       if (st) { st.textContent = "Rechecking the templates…"; recheckTemplates(st); }
+    });
+    ["2868", "2902"].forEach(function (num) {
+      var input = document.getElementById("tpl-" + num + "-file");
+      if (!input) return;
+      input.addEventListener("change", async function () {
+        var st = document.getElementById("tpl-status");
+        var id = "vr" + num, label = "VR" + num;
+        var file = input.files && input.files[0];
+        if (!file) return;
+        try {
+          var bytes = new Uint8Array(await file.arrayBuffer());
+          var pdf = await window.PDFLib.PDFDocument.load(bytes);
+          var names = pdf.getForm().getFields().map(function (f) { return f.getName(); });
+          var problem = checkTemplate(id, names);
+          if (problem) {
+            if (st) st.textContent = label + " not accepted — " + problem + " The bundled template stays in place.";
+            input.value = "";
+            return;
+          }
+          var rev = null;
+          try {
+            if (window.PacketBridgeExtract && window.pdfjsLib) {
+              var pdoc = await window.pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+              var txt = "";
+              for (var pg = 1; pg <= pdoc.numPages; pg++) {
+                var tc = await (await pdoc.getPage(pg)).getTextContent();
+                tc.items.forEach(function (it) { txt += it.str + " "; });
+              }
+              rev = window.PacketBridgeExtract.templateRevision(txt, label);
+            }
+          } catch (e) { rev = null; }
+          userTemplates[id] = bytes;
+          userTemplateRevs[id] = rev;
+          var fr3 = (window.PacketBridgeExtract && window.PacketBridgeExtract.FORM_REVISIONS) || {};
+          var knownYY = (id === "vr2868" ? fr3.vr2868 : fr3.vr2902) || "";
+          var known = knownYY.replace(/(\d{2}\/)\d{2}(\d{2})/, "$1$2");
+          if (st) st.textContent = label + " loaded (" + file.name + "): printed revision " +
+            (rev || "could not be read") + ". Structure checks out (" + names.length + " fields). " +
+            (rev && known && rev === known
+              ? "That is the revision PacketBridge was built and tested against."
+              : "PacketBridge was built and tested against rev " + (known || "?") + " (the TWC catalog revision as of " + (fr3.verified || "build") + ") — this form's structure matches, so it will be used, and its currency is your responsibility as the provider.") +
+            " It will be used for generation until you reload this page.";
+        } catch (e2) {
+          if (st) st.textContent = label + " could not be loaded — " + (e2 && e2.message ? e2.message : e2) + " The bundled template stays in place.";
+          input.value = "";
+        }
+      });
     });
     var btn = document.getElementById("generate-btn");
     if (!btn) return;

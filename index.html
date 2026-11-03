@@ -201,9 +201,19 @@
        <a href="https://www.twc.texas.gov/programs/vocational-rehabilitation/forms" target="_blank" rel="noopener">TWC VR Forms Catalog</a>
        (when this version was built it listed VR1884 rev 08/01/2025, VR2868 rev 08/01/2025, and
        VR2902 rev 06/01/2022).</p>
+    <h3>Use your own current forms (optional)</h3>
+    <p>If TWC has published newer forms and you have downloaded the current blank VR2868 and VR2902
+       from the TWC catalog, you can load them here and they will be used instead of the bundled
+       templates, until you reload this page. Each file is structure-checked before it is accepted,
+       and the revision printed on it is shown back to you. From that point, the currency of the form
+       is your responsibility as the provider — which is where TWC's own rule puts it. Nothing is
+       uploaded or stored; the files stay in this page's memory.</p>
+    <p><label>Blank VR2868 form (PDF) <input type="file" id="tpl-2868-file" accept="application/pdf"></label></p>
+    <p><label>Blank VR2902 form (PDF) <input type="file" id="tpl-2902-file" accept="application/pdf"></label></p>
+    <p id="tpl-status" role="status" aria-live="polite"></p>
   </details>
 
-  <p class="version">PacketBridge v0.15.0</p>
+  <p class="version">PacketBridge v0.16.0</p>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>
 <script src="lib/pdf.min.js"></script>
