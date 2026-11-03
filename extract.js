@@ -74,6 +74,11 @@
     LOCATIONS.forEach(function (pair) {
       if (isChecked(fields["Training Location " + pair[0]])) locations.push(pair[1]);
     });
+    /* The Other location's checkbox breaks the "Training Location " prefix
+       pattern, so it is read on its own, with its description field. */
+    var otherLocDesc = get("Description of Other Training Location");
+    if (isChecked(fields["Other Training Location specify"]) || otherLocDesc)
+      locations.push(otherLocDesc ? "Other: " + otherLocDesc : "Other (marked on the 1884, no description)");
     var delivery = get("VR Counselor approves all other AT training to be provided using the following delivery method");
     if (delivery && delivery.charAt(0) === "/") delivery = delivery.slice(1);
     var serviceRequested = get("Service Requested");
@@ -90,7 +95,10 @@
       referral: {
         serviceRequested: serviceRequested,
         date: get("Date of Referral"),
-        trainerNamed: get("Trainer Name and Contractor Agency")
+        trainerNamed: get("Trainer Name and Contractor Agency"),
+        atEvalProvided: isChecked(fields["Assistive Technology Evaluation Report if applicable Provided by TWCVR at Referral"]),
+        otherInfoProvided: isChecked(fields["Other Additional Information Provided by TWCVR at Referral"]),
+        otherInfoDescription: get("Description of Other Additional Information Provided by TWCVR at Referral")
       },
       customer: {
         name: get("Customers Name"),
@@ -105,6 +113,7 @@
         acuityOS: get("O S left eye"),
         visualFields: get("Visual Fields"),
         secondaryDisability: get("Customer Secondary Disability"),
+        primaryCommunication: get("If secondary disability is deaf blindness what is the customers primary form of communication"),
         healthIssues: get("Known Health Issues Safety Concerns"),
         currentHardware: get("List the customers current hardware"),
         currentSoftware: get("List the customers current software"),
@@ -144,6 +153,11 @@
      as "(806) 555 - 0100", so phone patterns allow spaces around the dash. */
   var PHONE_RE = "((?:\\(\\d{3}\\)\\s*)?\\d{3}\\s*-\\s*\\d{4})";
   function normPhone(v) { return v ? v.replace(/\s+/g, " ").replace(/\s*-\s*/g, "-") : v; }
+  /* pdf.js pads hyphens with spaces ("55 - A45W7"); IDs read as one value. */
+  function idValue(v) { return v ? v.replace(/\s*-\s*/g, "-") : v; }
+  /* An empty email field makes \S+ swallow the next label ("Contact");
+     a value with no @ is not an email address. */
+  function emailValue(v) { return v && /@/.test(v) ? v : null; }
   function normalizeText(text) {
     return String(text).replace(/[ \t]+/g, " ").replace(/ :/g, ":");
   }
@@ -154,8 +168,8 @@
       number: find(text, /Service Authorization Number:\s*(\d+)/),
       caseId: find(text, /Case ID:\s*\n?\s*(\d+)/),
       customerName: find(text, /Customer Name:\s*\n?\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*)/u),
-      contractNumber: find(text, /Contract Number:\s*(\S+)/),
-      vendorNumber: find(text, /Vendor Number:\s*(\S+)/),
+      contractNumber: idValue(find(text, /Contract Number:\s*([A-Za-z0-9]+(?:\s*-\s*[A-Za-z0-9]+)*)/)),
+      vendorNumber: idValue(find(text, /Vendor Number:\s*([A-Za-z0-9]+(?:\s*-\s*[A-Za-z0-9]+)*)/)),
       dateIssued: find(text, /Date Issued:\s*([\d/]+)/),
       startDate: find(text, /Start Date:\s*([\d/]+)/),
       endDate: find(text, /End Date:\s*([\d/]+)/),
@@ -179,13 +193,13 @@
     var twcContact = {
       name: find(text, /TWC Contact Name:\s*([\p{L}'’.\-]+(?: [\p{L}'’.\-]+)*)/u),
       phone: normPhone(find(text, new RegExp("Contact Phone No:\\s*" + PHONE_RE))),
-      email: find(text, /Contact Email:\s*(\S+)/)
+      email: emailValue(find(text, /Contact Email:\s*(\S+)/))
     };
     var items = [];
     var re = /^\d+\s+(.+?)\s+(\d+(?:\.\d+)?)\s+(Each|Hour)\s+\$\s*([\d,]+)\s+\$\s*([\d,]+)/gm;
     var im;
     while ((im = re.exec(text)) !== null) {
-      items.push({ description: clean(im[1]), qty: im[2], unit: im[3], unitCost: im[4], totalCost: im[5] });
+      items.push({ description: clean(im[1]).replace(/\s+-\s+/g, "-"), qty: im[2], unit: im[3], unitCost: im[4], totalCost: im[5] });
     }
     return { authorization: auth, officeFromSA: office, twcContact: twcContact, lineItems: items };
   }
@@ -264,6 +278,10 @@
     if (saText === null || saText === undefined) missingDocuments.push("Service Authorization (SA)");
     if (easText === null || easText === undefined) missingDocuments.push("EAS Consultation Report");
     var a = parse1884(fields1884 || {}); Object.assign(record, a);
+    /* A fillable 1884 with nothing filled in is a different problem from a
+       missing one: it loads fine but says nothing. Detect and say so. */
+    var referralBlank = fields1884 !== null && fields1884 !== undefined &&
+      !a.customer.name && !a.counselor.name && !(a.training.topics || []).length && !a.training.deliveryMethod;
     if (saText) Object.assign(record, parseSA(saText));
     if (easText) Object.assign(record, parseEAS(easText));
     record.authorization = record.authorization || {};
@@ -272,10 +290,17 @@
 
     var conflicts = [];
     var c = record.customer, e = record.eas;
-    if (c.currentHardware && e.homeHardware && e.homeHardware !== "N/A" &&
-        c.currentHardware.toLowerCase().indexOf(e.homeHardware.toLowerCase()) === -1 &&
-        e.homeHardware.toLowerCase().indexOf(c.currentHardware.toLowerCase()) === -1)
-      conflicts.push("Hardware: 1884 says \"" + c.currentHardware + "\", EAS (older) says \"" + e.homeHardware + "\" at home");
+    /* Hardware wording differs between forms ("Android phone" vs "Android
+       smart phone") — compare word overlap, not exact strings, and flag
+       only when the two descriptions barely overlap. */
+    if (c.currentHardware && e.homeHardware && e.homeHardware !== "N/A") {
+      var hwSet = function (t) { var o = {}; String(t).toLowerCase().split(/[^a-z0-9]+/).forEach(function (w) { if (w) o[w] = true; }); return o; };
+      var hwA = hwSet(c.currentHardware), hwB = hwSet(e.homeHardware);
+      var hwShared = Object.keys(hwA).filter(function (w) { return hwB[w]; }).length;
+      var hwMin = Math.min(Object.keys(hwA).length, Object.keys(hwB).length);
+      if (hwMin && hwShared / hwMin < 0.5)
+        conflicts.push("Hardware: 1884 says \"" + c.currentHardware + "\", EAS (older) says \"" + e.homeHardware + "\" at home");
+    }
     if (record.authorization.caseId && e.caseId && record.authorization.caseId !== e.caseId)
       conflicts.push("Case ID mismatch between SA and EAS");
     [["Customer name", c.name, record.authorization.customerName],
@@ -380,6 +405,7 @@
          the copy; if none exists, ask about authorizing one BEFORE the
          training runs). Fernando's call, 2026-11-02. */
       baselineGap: docs.indexOf("VR2902 Post-Training") !== -1 && docs.indexOf("VR2902 Baseline") === -1,
+      referralBlank: referralBlank,
       conflicts: conflicts,
       missingDocuments: missingDocuments,
       easGapFilled: gapFilled,
@@ -415,7 +441,9 @@
     missing.forEach(function (doc) { q.push("Please send the missing " + doc + "."); });
     if (d.baselineGap)
       q.push("Was a baseline VR2902 already completed (possibly under an earlier SA)? If so, please send a copy — the post-training assessment should re-test the same subjects and tasks. If not, should a baseline be authorized before training begins?");
-    var noRef = missing.indexOf("VR1884 Referral") !== -1;
+    if (d.referralBlank)
+      q.push("Please send the completed VR1884 Referral — the copy in this packet is blank.");
+    var noRef = missing.indexOf("VR1884 Referral") !== -1 || !!d.referralBlank;
     if (!noRef) {
       if (!record.customer.name) q.push("What is the customer's full name? None of the documents in this packet give it.");
       if (!record.customer.phone) q.push("What is the customer's phone number? It is not in this packet.");

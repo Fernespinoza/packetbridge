@@ -129,6 +129,8 @@
 
     var missingDocs = (rec.derived && rec.derived.missingDocuments) || [];
     var missingList = missingDocs.map(function (d) { return "⚠ Missing: " + d; });
+    if (rec.derived && rec.derived.referralBlank)
+      missingList.push("⚠ VR1884 Referral: the copy loaded appears to be unfilled — no customer, counselor, training topics, or delivery method on it.");
     if (rec.derived && rec.derived.baselineGap)
       missingList.push("⚠ Baseline VR2902: this SA funds a post-training assessment but no baseline. Ask the counselor: was a baseline VR2902 already completed (possibly under an earlier SA)? If so, request a copy — the post-training assessment should re-test the same subjects and tasks. If not, ask whether a baseline should be authorized before training begins.");
     if (missingList.length) {
@@ -155,10 +157,12 @@
       line("Visual diagnosis: ", piece(c.diagnosis, sc.diagnosis)),
       line("Acuity: OD (right) ", piece(c.acuityOD, sc.acuityOD), ", OS (left) ", piece(c.acuityOS, sc.acuityOS), ", visual fields ", piece(c.visualFields, sc.visualFields)),
       line("Secondary disability: ", piece(c.secondaryDisability, sc.secondaryDisability)),
+      c.primaryCommunication && c.primaryCommunication !== "N/A" ? line("Primary communication (deaf-blindness): ", txt(c.primaryCommunication)) : null,
       line("Health issues / safety concerns: ", piece(c.healthIssues, sc.healthIssues)),
       line("Current hardware: ", piece(c.currentHardware, sc.currentHardware)),
       line("Current software: ", piece(c.currentSoftware, sc.currentSoftware)),
       c.notes ? line("Notes: ", txt(c.notes)) : null,
+      c.circumstances && c.circumstances !== "N/A" ? line("Circumstances that may impact services: ", txt(c.circumstances)) : null,
       line("Best days to contact: ", piece(c.bestDaysToContact, sc.bestDaysToContact))
     ];
     frag.appendChild(section("What we have — customer", have));
@@ -182,7 +186,10 @@
       line("Service requested: ", piece(rec.referral.serviceRequested, "VR1884"), ", referral date ", piece(rec.referral.date, "VR1884")),
       line("Delivery method: ", piece(tr.deliveryMethod, "VR1884")),
       tr.locations.length ? line("Training location: ", txt(tr.locations.join("; ") + " (from the VR1884)")) : "Training location: none marked on the 1884",
-      tr.deliveryComments ? "Delivery comments: " + tr.deliveryComments : null
+      tr.deliveryComments ? "Delivery comments: " + tr.deliveryComments : null,
+      rec.referral.atEvalProvided ? "AT Evaluation Report was provided at referral (from the VR1884)" : null,
+      rec.referral.otherInfoDescription ? "Other information provided at referral: " + rec.referral.otherInfoDescription
+        : (rec.referral.otherInfoProvided ? "Other additional information was marked as provided at referral, with no description on the 1884" : null)
     ];
     (rec.lineItems || []).forEach(function (i) {
       trainingItems.push("Authorized on SA: " + i.description + " — " + i.qty + " " + i.unit + " at $" + i.unitCost + " = $" + i.totalCost);
