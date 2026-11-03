@@ -328,6 +328,16 @@
       setNotes(["Missing from the packet that was read: " + missingDocs.join(", ") + "."]);
       return;
     }
+    /* A loaded but BLANK VR1884 is the same problem as a missing one: it
+       names no customer, counselor, or requested training, so the forms
+       would be built on nothing. (Found 2026-11-02 in a roleplay run:
+       the readout flagged the blank referral, but this gate only checked
+       missingDocuments, which is empty when a blank 1884 is loaded.) */
+    if (record.derived && record.derived.referralBlank) {
+      setStatus("Not generating: the VR1884 in this packet is blank — it names no customer, counselor, or requested training. Ask the counselor for the completed referral, read the full packet (section 1), and then generate.");
+      setNotes(["The blank referral is listed in the readout, with a question for the counselor."]);
+      return;
+    }
     if (!window.PBDetails) { setStatus("The report form is not loaded."); return; }
     var profile = window.PBDetails.collectProfile();
     var details = window.PBDetails.collect();
