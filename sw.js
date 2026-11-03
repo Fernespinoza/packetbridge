@@ -1,7 +1,7 @@
 /* PacketBridge service worker — caches the PROGRAM (never packet data).
    Packet files are read in-memory by the page and are never stored, cached,
    or sent anywhere by this worker. */
-var CACHE = "packetbridge-v0.7.0";
+var CACHE = "packetbridge-v0.7.1";
 var ASSETS = [
   "./",
   "./index.html",
@@ -22,7 +22,13 @@ var ASSETS = [
 ];
 self.addEventListener("install", function (event) {
   event.waitUntil(
-    caches.open(CACHE).then(function (cache) { return cache.addAll(ASSETS); }).then(function () { return self.skipWaiting(); })
+    caches.open(CACHE).then(function (cache) {
+      /* no-cache: revalidate with the origin instead of trusting the
+         host's HTTP cache, which can still hold the previous release's
+         files during its propagation window (that is how a v0.7.0 cache
+         ended up containing v0.6.0's app.js). */
+      return cache.addAll(ASSETS.map(function (u) { return new Request(u, { cache: "no-cache" }); }));
+    }).then(function () { return self.skipWaiting(); })
   );
 });
 self.addEventListener("activate", function (event) {
@@ -44,7 +50,7 @@ self.addEventListener("fetch", function (event) {
     url.pathname.slice(-3) === ".js" && url.pathname.indexOf("/lib/") === -1;
   if (event.request.mode === "navigate" || ownScript) {
     event.respondWith(
-      fetch(event.request).then(function (res) {
+      fetch(event.request, { cache: "no-cache" }).then(function (res) {
         var copy = res.clone();
         caches.open(CACHE).then(function (cache) { cache.put(event.request, copy); });
         return res;
