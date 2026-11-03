@@ -60,6 +60,9 @@
       additionalNeeds: "",
       followUp: "", /* "" | "Short" | "Long" — VR2868 follow-up period radio */
       subjects: subjects,
+      /* Trainer-confirmed prerequisites — confirmed by hand in the form,
+         never extracted from the packet (Fernando, 2026-11-02). */
+      prereqs: { atEvalDone: false, equipmentReady: false, baselineCopyReceived: false },
       ratings: { baseline: {}, post: {} } /* field name -> "0"|"1"|"2" (WPM fields: free text) */
     };
   }
@@ -88,7 +91,7 @@
     return found;
   }
 
-  function validateDetails(d, sections) {
+  function validateDetails(d, sections, record) {
     var warnings = [];
     if (!d) return ["No details yet."];
     if (d.sessions.length > MAX_SESSIONS)
@@ -100,6 +103,35 @@
     });
     if (!d.subjects.length)
       warnings.push("No VR2902 subjects selected — the generated packet will have no assessments.");
+    /* Authorized-limits guard (Fernando, 2026-11-02): planned session
+       hours are totaled against the SA's authorized training hours, and
+       session dates are checked against the SA window. Warnings, not
+       blocks — the trainer may know something the packet doesn't say. */
+    if (record && record.authorization && record.derived) {
+      var totalHours = 0;
+      d.sessions.forEach(function (s) { var h = parseFloat(s.hours); if (!isNaN(h)) totalHours += h; });
+      var saH = record.derived.saHours || {};
+      var authorized = saH.training > 0 ? saH.training : (saH.allHours || 0);
+      function trimNum(n) { return Math.round(n * 100) / 100; }
+      if (authorized > 0 && totalHours > authorized)
+        warnings.push("Sessions total " + trimNum(totalHours) + " hours, but the SA authorizes " + trimNum(authorized) +
+          " hours of training — " + trimNum(totalHours - authorized) + " hours over the authorized limit.");
+      function mdyToISO(v) {
+        var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(v || ""));
+        if (!m) return null;
+        function pp(x) { return (x.length < 2 ? "0" : "") + x; }
+        return m[3] + "-" + pp(m[1]) + "-" + pp(m[2]);
+      }
+      var winStart = mdyToISO(record.authorization.startDate);
+      var winEnd = mdyToISO(record.authorization.endDate);
+      if (winStart || winEnd) {
+        d.sessions.forEach(function (s, i) {
+          if (s.date && ((winStart && s.date < winStart) || (winEnd && s.date > winEnd)))
+            warnings.push("Session " + (i + 1) + " is dated " + s.date + ", outside the SA window (" +
+              (record.authorization.startDate || "…") + " to " + (record.authorization.endDate || "…") + ").");
+        });
+      }
+    }
     if (d.mode === "complete" && sections) {
       d.subjects.forEach(function (subj) {
         var sec = sectionForSubject(sections, subj);
@@ -140,6 +172,7 @@
     Object.keys(base).forEach(function (k) { if (d[k] === undefined) d[k] = base[k]; });
     if (!Array.isArray(d.sessions) || !d.sessions.length) d.sessions = [blankSession()];
     if (!Array.isArray(d.subjects)) d.subjects = [];
+    d.prereqs = Object.assign({ atEvalDone: false, equipmentReady: false, baselineCopyReceived: false }, d.prereqs || {});
     return obj;
   }
 
@@ -450,6 +483,11 @@
       additionalNeeds: $("dt-additionalNeeds").value.trim(),
       followUp: $("dt-followUp").value,
       subjects: collectSubjectsOnly(),
+      prereqs: {
+        atEvalDone: !!($("pq-atEval") && $("pq-atEval").checked),
+        equipmentReady: !!($("pq-equipment") && $("pq-equipment").checked),
+        baselineCopyReceived: !!($("pq-baseline") && $("pq-baseline").checked)
+      },
       ratings: ratings
     };
   }
@@ -468,10 +506,15 @@
       var cb = $("subj-" + s.replace(/\s+/g, "-"));
       if (cb) cb.checked = d.subjects.indexOf(s) >= 0;
     });
+    if ($("pq-atEval")) $("pq-atEval").checked = !!(d.prereqs && d.prereqs.atEvalDone);
+    if ($("pq-equipment")) $("pq-equipment").checked = !!(d.prereqs && d.prereqs.equipmentReady);
+    if ($("pq-baseline")) $("pq-baseline").checked = !!(d.prereqs && d.prereqs.baselineCopyReceived);
     ratingsState = {
       baseline: Object.assign({}, (d.ratings && d.ratings.baseline) || {}),
       post: Object.assign({}, (d.ratings && d.ratings.post) || {})
     };
+    if (typeof window !== "undefined" && window.PBRefreshReadiness)
+      window.PBRefreshReadiness(d.prereqs || {});
     renderSessions(d.sessions && d.sessions.length ? d.sessions : [blankSession()]);
     updateModeNote();
   }
@@ -511,6 +554,12 @@
     document.querySelectorAll('input[name="pb-mode"]').forEach(function (r) {
       r.addEventListener("change", updateModeNote);
     });
+    ["pq-atEval", "pq-equipment", "pq-baseline"].forEach(function (id) {
+      var cb = $(id);
+      if (cb) cb.addEventListener("change", function () {
+        if (window.PBRefreshReadiness) window.PBRefreshReadiness(collectDetails().prereqs);
+      });
+    });
     $("save-draft").addEventListener("click", function () {
       var details = collectDetails();
       var json = serializeDraft(details, currentRecord);
@@ -520,7 +569,7 @@
       a.href = URL.createObjectURL(blob); a.download = name;
       document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 400);
-      var w = validateDetails(details, tasksData() ? tasksData().sections : null);
+      var w = validateDetails(details, tasksData() ? tasksData().sections : null, currentRecord);
       setDetailsStatus("Draft saved as " + name + (w.length ? " Heads up: " + w.join(" ") : ""));
       window.PBState = { record: currentRecord, profile: saveProfile(), details: details };
     });

@@ -116,6 +116,16 @@
         Leave a task blank if it wasn't assessed.</p>
     </fieldset>
 
+    <fieldset>
+      <legend>Prerequisites — confirmed by you (not read from the packet)</legend>
+      <div><input type="checkbox" id="pq-atEval">
+        <label for="pq-atEval">AT evaluation completed</label></div>
+      <div><input type="checkbox" id="pq-equipment">
+        <label for="pq-equipment">Equipment delivered and installed</label></div>
+      <div><input type="checkbox" id="pq-baseline">
+        <label for="pq-baseline">Baseline VR2902 copy received (when the SA funds post-training only)</label></div>
+    </fieldset>
+
     <h3>VR2902 — Baseline assessment</h3>
     <div class="fld"><label for="dt-assessmentDate">Baseline assessment date</label>
       <input type="date" id="dt-assessmentDate"></div>
@@ -184,7 +194,7 @@
   <section aria-labelledby="next-h">
     <h2 id="next-h">Coming next</h2>
     <p>PacketBridge now covers the full path: referral in, readout, report form, and the filled report packet out. Remaining work is hardening against more real-world packet variations.</p>
-    <p class="version">PacketBridge v0.11.0 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Partial packets accepted: load any of the three referral files and the readout lists what's missing. Every fact in the readout is labeled with the document it came from; missing info is highlighted yellow and conflicts red. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+    <p class="version">PacketBridge v0.12.0 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Partial packets accepted: load any of the three referral files and the readout lists what's missing. Every fact in the readout is labeled with the document it came from; missing info is highlighted yellow and conflicts red. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
   </section>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>

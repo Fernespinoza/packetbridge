@@ -129,6 +129,37 @@
     return f;
   }
 
+  /* "Ready to schedule?" block — rendered at the top of the readout and
+     re-rendered live when the trainer ticks a prerequisite checkbox in
+     the details form (window.PBRefreshReadiness). */
+  var lastRecord = null, lastPrereqs = {};
+  function fillReadiness(host, rec, prereqs) {
+    host.textContent = "";
+    if (!window.PacketBridgeExtract.readiness) return;
+    var r = window.PacketBridgeExtract.readiness(rec, prereqs);
+    host.appendChild(el("h2", "Ready to schedule?"));
+    var marks = { pass: "✓ Pass", check: "⚠ Check", missing: "✗ Missing" };
+    var ul = el("ul");
+    r.items.forEach(function (it) {
+      var li = el("li", marks[it.status] + " — " + it.label + ": " + it.detail);
+      if (it.status !== "pass") li.className = "missing-line";
+      ul.appendChild(li);
+    });
+    r.prereqs.forEach(function (pq) {
+      if (!pq.applies) return;
+      var li = el("li", (pq.done ? "✓ Confirmed" : "⚠ Not confirmed") + " — Prerequisite: " + pq.label);
+      if (!pq.done) li.className = "missing-line";
+      ul.appendChild(li);
+    });
+    host.appendChild(ul);
+    host.appendChild(el("p", r.summary));
+  }
+  window.PBRefreshReadiness = function (prereqs) {
+    lastPrereqs = prereqs || {};
+    var host = document.getElementById("readiness-block");
+    if (host && lastRecord) fillReadiness(host, lastRecord, lastPrereqs);
+  };
+
   function renderReadout(rec) {
     readoutEl.textContent = "";
     var frag = document.createDocumentFragment();
@@ -144,6 +175,11 @@
       (packetName && sc.name ? " (from the " + sc.name + ")" : "")));
     if (rec.derived && rec.derived.referralFlattened)
       frag.appendChild(el("p", "Note: the VR1884 in this packet is a flattened print, so its values were read from the printed text rather than from form fields — double-check them."));
+    lastRecord = rec; lastPrereqs = {};
+    var readinessHost = document.createElement("div");
+    readinessHost.id = "readiness-block";
+    fillReadiness(readinessHost, rec, lastPrereqs);
+    frag.appendChild(readinessHost);
 
     /* SA delivery instructions sometimes name who must deliver the
        training. If that name matches neither the trainer nor the provider

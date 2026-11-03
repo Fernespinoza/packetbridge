@@ -784,6 +784,84 @@
     return groups;
   }
 
+  /* "Ready to schedule?" — the six readiness checks over the record, in
+     the course's practice format: each item is Pass, Check, or Missing,
+     with a one-paragraph summary. The trainer-confirmed prerequisites
+     (item: atEvalDone / equipmentReady / baselineCopyReceived) are NOT
+     extracted — they are passed in from the details form, where the
+     trainer confirms them by hand. */
+  function readiness(record, prereqs) {
+    prereqs = prereqs || {};
+    var d = record.derived || {};
+    var missing = d.missingDocuments || [];
+    function item(label, status, detail) { return { label: label, status: status, detail: detail }; }
+    var items = [];
+    if (missing.indexOf("VR1884 Referral") !== -1)
+      items.push(item("Referral received", "missing", "No VR1884 in this packet — ask the counselor to send it."));
+    else if (d.referralBlank)
+      items.push(item("Referral received", "check", "The VR1884 loaded is blank — a completed copy is needed."));
+    else
+      items.push(item("Referral received", "pass", d.referralFlattened ? "Read from a flattened print — double-check its values." : "The VR1884 is in the packet."));
+    if (missing.indexOf("Service Authorization (SA)") !== -1)
+      items.push(item("Authorization current", "missing", "No SA in this packet."));
+    else if (d.saStatus === "expired")
+      items.push(item("Authorization current", "missing", "The SA expired on " + record.authorization.endDate + "."));
+    else if (d.saStatus === "not-yet")
+      items.push(item("Authorization current", "check", "The SA does not start until " + record.authorization.startDate + "."));
+    else if (d.saStatus === "current")
+      items.push(item("Authorization current", "pass", "The SA is inside its window (" + record.authorization.startDate + " to " + record.authorization.endDate + ")."));
+    else
+      items.push(item("Authorization current", "check", "The SA's dates could not be read."));
+    var nConf = (d.conflicts || []).length;
+    if (nConf)
+      items.push(item("Documents agree", "check", nConf + " conflict" + (nConf === 1 ? "" : "s") + " to resolve with the counselor (listed below)."));
+    else if (missing.length >= 2)
+      items.push(item("Documents agree", "check", "Only one document was loaded, so nothing could be cross-checked."));
+    else
+      items.push(item("Documents agree", "pass", "No conflicts among the documents loaded."));
+    var stale = (d.dateFlags || []).filter(function (f) { return f.kind.indexOf("stale") === 0; });
+    if (stale.length)
+      items.push(item("Documents current", "check", stale.map(function (f) { return f.kind === "stale-eas" ? "the EAS is over 6 months older than the SA" : "the VR1884 is over 6 months older than the SA"; }).join("; ") + " — confirm the information is still current."));
+    else
+      items.push(item("Documents current", "pass", "No document is more than 6 months older than the SA."));
+    if (missing.indexOf("Service Authorization (SA)") !== -1)
+      items.push(item("Baseline settled", "check", "No SA loaded — whether a baseline is funded is unknown."));
+    else if (!d.baselineGap)
+      items.push(item("Baseline settled", "pass", "The SA funds a baseline assessment (or no post-training assessment is funded)."));
+    else if (prereqs.baselineCopyReceived)
+      items.push(item("Baseline settled", "pass", "The SA funds post-training only, and the earlier baseline copy has been received."));
+    else
+      items.push(item("Baseline settled", "check", "The SA funds a post-training assessment but no baseline — get the earlier baseline copy from the counselor, or ask about authorizing one."));
+    var planBits = [];
+    if (!record.customer.phone) planBits.push("no customer phone number");
+    if (!record.training.deliveryMethod) planBits.push("no delivery method");
+    if (!record.training.locations || !record.training.locations.length) planBits.push("no training location");
+    if (!planBits.length)
+      items.push(item("Contact and plan clear", "pass", "Customer phone, delivery method, and training location are all known."));
+    else if (!record.customer.phone)
+      items.push(item("Contact and plan clear", "missing", "Missing: " + planBits.join(", ") + " — the customer cannot be contacted yet."));
+    else
+      items.push(item("Contact and plan clear", "check", "Missing: " + planBits.join(", ") + "."));
+    var pq = [
+      { key: "atEvalDone", label: "AT evaluation completed", done: !!prereqs.atEvalDone, applies: true },
+      { key: "equipmentReady", label: "Equipment delivered and installed", done: !!prereqs.equipmentReady, applies: true },
+      { key: "baselineCopyReceived", label: "Baseline VR2902 copy received", done: !!prereqs.baselineCopyReceived, applies: !!d.baselineGap }
+    ];
+    var openPq = pq.filter(function (x) { return x.applies && !x.done; });
+    var ready = items.every(function (i) { return i.status === "pass"; }) && openPq.length === 0;
+    var summary;
+    if (ready) {
+      summary = "Ready to schedule. The referral and authorization are in hand and current, the documents agree, the baseline is settled, and the prerequisites are confirmed — the remaining work is scheduling the customer and doing the training.";
+    } else {
+      var blockers = items.filter(function (i) { return i.status !== "pass"; })
+        .map(function (i) { return i.label + " — " + i.detail; });
+      if (openPq.length)
+        blockers.push("Prerequisites not yet confirmed — " + openPq.map(function (x) { return x.label.toLowerCase(); }).join(", "));
+      summary = "Not ready to schedule yet. Outstanding: " + blockers.join("; ");
+    }
+    return { ready: ready, items: items, prereqs: pq, summary: summary };
+  }
+
   /* Document self-identification (Fernando's direction, 2026-11-02, after
      he swapped the SA and EAS slots by accident and got a readout full of
      "not found"): the loader takes the packet files in any order and sorts
@@ -827,7 +905,7 @@
     return /VR1884/.test(t) && /Assistive Technology Services for Customers/.test(t);
   }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884 };
+  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);

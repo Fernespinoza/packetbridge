@@ -336,7 +336,9 @@
     setNotes([]);
     try {
       var packet = buildPacket(record, profile, details, tasksData);
-      var notes = packet.warnings.slice();
+      var guardWarnings = (window.PacketBridgeDetails && window.PacketBridgeDetails.validateDetails)
+        ? window.PacketBridgeDetails.validateDetails(details, tasksData ? tasksData.sections : null, record) : [];
+      var notes = packet.warnings.slice().concat(guardWarnings);
       for (var i = 0; i < packet.docs.length; i++) {
         var doc = packet.docs[i];
         var tpl = await loadTemplate(doc.template);
