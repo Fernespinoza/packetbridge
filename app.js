@@ -136,6 +136,13 @@
       mSec.querySelectorAll("li").forEach(function (li) { li.className = "missing-line"; });
       frag.appendChild(mSec);
     }
+    /* One counselor-ready list: the missing items and the inconsistencies,
+       phrased as questions — what goes in the email or gets asked on the
+       call (Fernando's direction, 2026-11-02). */
+    var questions = window.PacketBridgeExtract.counselorQuestions
+      ? window.PacketBridgeExtract.counselorQuestions(rec) : [];
+    if (questions.length)
+      frag.appendChild(section("Questions for the counselor", questions));
 
     var addrText = [c.address.street, c.address.city, ((c.address.state || "") + " " + (c.address.zip || "")).trim()].filter(Boolean).join(", ");
     var have = [

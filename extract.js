@@ -390,7 +390,43 @@
     return record;
   }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord };
+  /* The counselor-facing summary of a readout: every missing item and
+     every inconsistency, phrased as the questions to ask — the list that
+     goes in the email or gets read out on the call. Facts a missing
+     VR1884 would answer (names, phone numbers — the 1884 is their only
+     source) are not asked separately; the send-the-1884 question covers
+     them. Added at Fernando's direction, 2026-11-02. */
+  function questionFromConflict(c) {
+    if (/^Case ID mismatch/.test(c))
+      return "Please confirm the correct Case ID — the SA and the EAS disagree.";
+    var s = String(c)
+      .replace(/1884 says/g, "the VR1884 says")
+      .replace(/EAS \(older\) says/g, "the EAS says")
+      .replace(/: 1884 "/g, ": the VR1884 says \"")
+      .replace(/ vs SA "/g, " but the SA says \"")
+      .replace(/ vs EAS "/g, " but the EAS says \"");
+    return "Please confirm which is correct — " + s;
+  }
+
+  function counselorQuestions(record) {
+    var q = [];
+    var d = record.derived || {};
+    var missing = d.missingDocuments || [];
+    missing.forEach(function (doc) { q.push("Please send the missing " + doc + "."); });
+    if (d.baselineGap)
+      q.push("Was a baseline VR2902 already completed (possibly under an earlier SA)? If so, please send a copy — the post-training assessment should re-test the same subjects and tasks. If not, should a baseline be authorized before training begins?");
+    var noRef = missing.indexOf("VR1884 Referral") !== -1;
+    if (!noRef) {
+      if (!record.customer.name) q.push("What is the customer's full name? None of the documents in this packet give it.");
+      if (!record.customer.phone) q.push("What is the customer's phone number? It is not in this packet.");
+      if (!record.counselor.name) q.push("Who is the VR counselor for this case? The packet does not name one.");
+      if (!record.counselor.phone) q.push("What is the counselor's phone number? It is not in this packet.");
+    }
+    (d.conflicts || []).forEach(function (c) { q.push(questionFromConflict(c)); });
+    return q;
+  }
+
+  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);
