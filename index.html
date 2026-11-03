@@ -186,15 +186,24 @@
        assessment ratings and scores stay blank and unassessed subjects are marked N/A, matching the
        course shells. In Complete mode your ratings and their automatic scores are filled in.
        Signatures are always left blank — those are signed by hand. Before filling, each template's
-       fingerprint is checked; if TWC has revised a form, generation stops with a warning instead of
-       filling the wrong revision. The PDFs are generated on this computer and download straight to
+       fingerprint is checked against the revision it was verified from; if the file does not match,
+       generation stops instead of filling a wrong or damaged form. The PDFs are generated on this computer and download straight to
        it — nothing is uploaded.</p>
     <p><button type="button" id="generate-btn">Generate the packet (3 PDFs)</button></p>
     <p id="generate-status" role="status" aria-live="polite"></p>
     <ul id="generate-notes"></ul>
+    <p><button type="button" id="recheck-btn">Recheck the form templates</button></p>
+    <p id="recheck-status" role="status" aria-live="polite"></p>
+    <p>PacketBridge carries its form templates inside itself and never sends data anywhere, so it
+       cannot pull new forms on its own — if TWC revises a form, the fix is a new PacketBridge
+       version. The recheck above verifies that the templates in this copy are intact and are the
+       revisions listed. To compare against TWC's library yourself, open the
+       <a href="https://www.twc.texas.gov/programs/vocational-rehabilitation/forms" target="_blank" rel="noopener">TWC VR Forms Catalog</a>
+       (when this version was built it listed VR1884 rev 08/01/2025, VR2868 rev 08/01/2025, and
+       VR2902 rev 06/01/2022).</p>
   </details>
 
-  <p class="version">PacketBridge v0.14.1</p>
+  <p class="version">PacketBridge v0.15.0</p>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>
 <script src="lib/pdf.min.js"></script>

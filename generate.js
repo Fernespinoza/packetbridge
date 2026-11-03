@@ -269,7 +269,8 @@
   }
 
   var templateCache = {};
-  async function loadTemplate(templateId) {
+  async function loadTemplate(templateId, force) {
+    if (force) delete templateCache[templateId];
     if (templateCache[templateId]) return templateCache[templateId];
     var bytes;
     if (window.PB_TEMPLATES && window.PB_TEMPLATES[templateId]) {
@@ -368,7 +369,44 @@
     }
   }
 
+  /* Manual template recheck (Fernando, 2026-11-02): for a user who left
+     the program open, re-load both bundled templates fresh and re-run
+     their fingerprint checks on demand, reporting the verified revision
+     of each. PacketBridge carries its templates inside itself and never
+     sends data anywhere, so it CANNOT pull a newly published TWC form —
+     if TWC revises a form, the fix is a new PacketBridge version. This
+     button proves the templates in this copy are intact and are the
+     revisions listed; the Generate section links the TWC catalog for a
+     human comparison. */
+  async function recheckTemplates(statusEl) {
+    var fr = (window.PacketBridgeExtract && window.PacketBridgeExtract.FORM_REVISIONS) || {};
+    var lines = [];
+    var ids = ["vr2868", "vr2902"];
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i], label = id.toUpperCase(), rev = id === "vr2868" ? fr.vr2868 : fr.vr2902;
+      try {
+        var bytes = await loadTemplate(id, true);
+        var pdf = await window.PDFLib.PDFDocument.load(bytes);
+        var names = pdf.getForm().getFields().map(function (f) { return f.getName(); });
+        var problem = checkTemplate(id, names);
+        lines.push(problem
+          ? label + " rev " + rev + ": PROBLEM — " + problem + " Do not generate from this copy; download a fresh copy of PacketBridge."
+          : label + " rev " + rev + ": fingerprint OK (" + names.length + " fields, matches the verified template).");
+      } catch (e) {
+        lines.push(label + ": could not be rechecked — " + (e && e.message ? e.message : e));
+      }
+    }
+    lines.push("These templates matched the TWC VR Forms Catalog on " + (fr.verified || "the date this version was built") +
+      ". If TWC has published a newer revision since then, this copy cannot fetch it — a new PacketBridge version is needed.");
+    statusEl.textContent = lines.join(" ");
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    var rbtn = document.getElementById("recheck-btn");
+    if (rbtn) rbtn.addEventListener("click", function () {
+      var st = document.getElementById("recheck-status");
+      if (st) { st.textContent = "Rechecking the templates…"; recheckTemplates(st); }
+    });
     var btn = document.getElementById("generate-btn");
     if (!btn) return;
     btn.addEventListener("click", function () {

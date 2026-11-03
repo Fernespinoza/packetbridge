@@ -929,7 +929,20 @@
     return /VR1884/.test(t) && /Assistive Technology Services for Customers/.test(t);
   }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness };
+  /* The form revisions this build reads and generates, checked against
+     the TWC VR Forms Catalog on 2026-11-02 (VR1884 rev 08/01/2025,
+     VR2868 rev 08/01/2025, VR2902 rev 06/01/2022 — all matched). The
+     generated forms are additionally fingerprint-verified at generation
+     time in generate.js; the referral's revision is read from the form's
+     own printed title and flagged when it is not the known one. */
+  var FORM_REVISIONS = { vr1884: "08/25", vr2868: "08/2025", vr2902: "06/2022", verified: "2026-11-02", catalog: "https://www.twc.texas.gov/programs/vocational-rehabilitation/forms" };
+  function referralRevision(text) {
+    if (!text) return null;
+    var m = normalizeText(text).match(/VR1884 \((\d{2}\/\d{2})\)/);
+    return m ? m[1] : null;
+  }
+
+  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness, FORM_REVISIONS: FORM_REVISIONS, referralRevision: referralRevision };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);

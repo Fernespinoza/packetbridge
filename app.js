@@ -186,8 +186,22 @@
       (rec.eas && rec.eas.reportFor) || null;
     frag.appendChild(el("h2", "Packet for " + val(packetName) +
       (packetName && sc.name ? " (from the " + sc.name + ")" : "")));
+    var fr2 = window.PacketBridgeExtract.FORM_REVISIONS;
+    frag.appendChild(el("p", "Form revisions: PacketBridge reads the VR1884 rev " + fr2.vr1884 +
+      " and generates the VR2868 rev " + fr2.vr2868 + " and VR2902 rev " + fr2.vr2902 +
+      " — the current TWC VR Forms Catalog revisions as of " + fr2.verified + "."));
+    if (rec.derived && rec.derived.referralRevision && window.PacketBridgeExtract.FORM_REVISIONS &&
+        rec.derived.referralRevision !== window.PacketBridgeExtract.FORM_REVISIONS.vr1884) {
+      var rvNote = el("p", "⚠ This referral is on VR1884 rev " + rec.derived.referralRevision +
+        ", but PacketBridge reads the " + window.PacketBridgeExtract.FORM_REVISIONS.vr1884 +
+        " layout — the form was revised, so fields may have moved. Double-check the readout against the referral itself before relying on it.");
+      rvNote.className = "conflict";
+      frag.appendChild(rvNote);
+    }
     if (rec.derived && rec.derived.referralFlattened)
       frag.appendChild(el("p", "Note: the VR1884 in this packet is a flattened print, so its values were read from the printed text rather than from form fields — double-check them."));
+    if (staged["1884"] && staged["1884"].text)
+      rec.derived.referralRevision = window.PacketBridgeExtract.referralRevision(staged["1884"].text);
     lastRecord = rec; lastPrereqs = {};
     var readinessHost = document.createElement("details");
     readinessHost.open = true;
@@ -383,6 +397,10 @@
       try { fields = await readPdfFields(file); } catch (e) { fields = null; }
       if (window.PacketBridgeExtract.is1884Fields(fields)) {
         kind = "1884";
+        /* Also load the text (best effort): the form's printed title
+           carries its revision ("VR1884 (08/25)"), which the readout
+           checks against the layout this build reads. */
+        try { text = await readPdfText(file); } catch (e) { text = null; }
       } else {
         try { text = await readPdfText(file); } catch (e) { text = null; }
         kind = text ? window.PacketBridgeExtract.classifyText(text) : null;
