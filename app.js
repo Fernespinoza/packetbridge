@@ -289,7 +289,7 @@
       } else {
         try { text = await readPdfText(file); } catch (e) { text = null; }
         kind = text ? window.PacketBridgeExtract.classifyText(text) : null;
-        if (!kind && text && (!fields || Object.keys(fields).length === 0) && /VR1884/.test(text)) {
+        if (!kind && text && (!fields || Object.keys(fields).length === 0) && window.PacketBridgeExtract.isFlat1884Text(text)) {
           /* A referral with no fillable fields at all: flattened/scanned. */
           if (!flat1884Name && !staged["1884"]) flat1884Name = file.name;
           else stagedNotes.push({ name: file.name, text: file.name + " — another flattened VR1884; only one can be used" });

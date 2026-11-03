@@ -470,12 +470,27 @@
   }
   function classifyText(text) {
     if (!text) return null;
-    if (/Service Authorization Number:/.test(text) && /TWC CCS Name\/Number:/.test(text)) return "SA";
-    if (/EAS Consultation Report/.test(text) || /EAS Initial Consultation Report/.test(text)) return "EAS";
+    /* pdf.js text has irregular spacing ("TWC CCS  Name/Number:", triple
+       spaces after colons) — normalize exactly like the parsers do before
+       matching, or the real exam SA's CCS label never matches literally. */
+    var t = normalizeText(text);
+    if (/Service Authorization Number:/.test(t) && /TWC CCS Name\/Number:/.test(t)) return "SA";
+    if (/EAS Consultation Report/.test(t) || /EAS Initial Consultation Report/.test(t)) return "EAS";
     return null;
   }
+  /* A flattened/scanned 1884 (printable text, no form fields). The marker
+     must be strict: an ordinary SA MENTIONS the VR1884 ("Delivery
+     Instructions: Per VR1884 dated ...") and was misread as a flattened
+     1884 on 2026-11-02. A real referral print carries the form's own
+     printed labels — require VR1884 plus Training Topic plus Service
+     Requested, none of which an SA or EAS contains. */
+  function isFlat1884Text(text) {
+    if (!text) return false;
+    var t = normalizeText(text);
+    return /VR1884/.test(t) && /Training Topics?/.test(t) && /Service Requested/.test(t);
+  }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText };
+  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);
