@@ -244,31 +244,109 @@
     readoutEl.appendChild(frag);
   }
 
-  document.getElementById("packet-form").addEventListener("submit", async function (ev) {
-    ev.preventDefault();
-    var f1884 = document.getElementById("f1884").files[0];
-    var fsa = document.getElementById("fsa").files[0];
-    var feas = document.getElementById("feas").files[0];
-    /* Any subset of the packet may be read — the readout lists what is
-       missing. Only a completely empty submission is refused. */
-    if (!f1884 && !fsa && !feas) { setStatus("No files picked yet — choose at least one packet file (the VR1884, the SA, or the EAS), then read the packet."); return; }
-    setStatus("Reading packet…");
-    try {
-      var fields = null;
-      if (f1884) {
-        fields = await readPdfFields(f1884);
-        if (!fields || Object.keys(fields).length === 0) {
-          setStatus("That 1884 has no fillable form fields — it may be a flattened or scanned copy. PacketBridge v0.1 needs the fillable PDF.");
-          return;
+  /* ---- any-order loader: files identify themselves ----
+     The user picks or drops the packet files in any order; each file is
+     classified on arrival (1884 by its form fields, SA/EAS by content —
+     see extract.js) and staged under its kind. Read builds the record from
+     whatever was staged. Swapping files between slots is impossible now
+     because there are no slots (Fernando's accident, 2026-11-02). */
+  var KIND_LABEL = { "1884": "VR1884 Referral", "SA": "Service Authorization (SA)", "EAS": "EAS Consultation Report" };
+  var staged = {};        /* kind -> { name, fields, text } */
+  var stagedNotes = [];   /* unidentifiable files and duplicates, by name */
+  var flat1884Name = null;
+
+  function renderStaged() {
+    var host = document.getElementById("staged-list");
+    host.innerHTML = "";
+    ["1884", "SA", "EAS"].forEach(function (kind) {
+      if (!staged[kind]) return;
+      var li = document.createElement("li");
+      li.textContent = "✓ " + staged[kind].name + " — identified as the " + KIND_LABEL[kind];
+      host.appendChild(li);
+    });
+    if (flat1884Name) {
+      var lf = document.createElement("li");
+      lf.textContent = "⚠ " + flat1884Name + " — looks like a VR1884 but has no fillable form fields (flattened or scanned); it cannot be read";
+      host.appendChild(lf);
+    }
+    stagedNotes.forEach(function (n) {
+      var li = document.createElement("li");
+      li.textContent = "✗ " + n;
+      host.appendChild(li);
+    });
+  }
+
+  async function stageFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    if (!files.length) return;
+    setStatus("Identifying " + files.length + " file" + (files.length === 1 ? "" : "s") + "…");
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      var fields = null, text = null, kind = null;
+      try { fields = await readPdfFields(file); } catch (e) { fields = null; }
+      if (window.PacketBridgeExtract.is1884Fields(fields)) {
+        kind = "1884";
+      } else {
+        try { text = await readPdfText(file); } catch (e) { text = null; }
+        kind = text ? window.PacketBridgeExtract.classifyText(text) : null;
+        if (!kind && text && (!fields || Object.keys(fields).length === 0) && /VR1884/.test(text)) {
+          /* A referral with no fillable fields at all: flattened/scanned. */
+          if (!flat1884Name && !staged["1884"]) flat1884Name = file.name;
+          else stagedNotes.push(file.name + " — another flattened VR1884; only one can be used");
+          continue;
         }
       }
-      var saText = fsa ? await readPdfText(fsa) : null;
-      var easText = feas ? await readPdfText(feas) : null;
+      if (!kind) { stagedNotes.push(file.name + " — could not identify this document; it will not be loaded"); continue; }
+      if (staged[kind]) { stagedNotes.push(file.name + " — also looks like the " + KIND_LABEL[kind] + "; keeping " + staged[kind].name); continue; }
+      staged[kind] = { name: file.name, fields: fields, text: text };
+    }
+    renderStaged();
+    var got = Object.keys(staged).map(function (k) { return KIND_LABEL[k]; });
+    setStatus(got.length
+      ? "Identified: " + got.join(", ") + ". Press Read packet when you're ready."
+      : "None of those files could be identified as a VR1884, an SA, or an EAS.");
+  }
+
+  var picker = document.getElementById("packet-files");
+  picker.addEventListener("change", function () { stageFiles(picker.files); });
+  document.getElementById("clear-files").addEventListener("click", function () {
+    staged = {}; stagedNotes = []; flat1884Name = null;
+    picker.value = "";
+    renderStaged();
+    setStatus("Files cleared. Pick or drop the packet files when you're ready.");
+  });
+  var zone = document.getElementById("drop-zone");
+  ["dragenter", "dragover"].forEach(function (evName) {
+    zone.addEventListener(evName, function (ev) { ev.preventDefault(); zone.classList.add("dragging"); });
+  });
+  ["dragleave", "drop"].forEach(function (evName) {
+    zone.addEventListener(evName, function (ev) { ev.preventDefault(); zone.classList.remove("dragging"); });
+  });
+  zone.addEventListener("drop", function (ev) {
+    if (ev.dataTransfer && ev.dataTransfer.files) stageFiles(ev.dataTransfer.files);
+  });
+
+  document.getElementById("packet-form").addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    /* Any subset of the packet may be read — the readout lists what is
+       missing. Only a completely empty submission is refused. */
+    if (!Object.keys(staged).length) {
+      setStatus(flat1884Name
+        ? "That 1884 has no fillable form fields — it may be a flattened or scanned copy. PacketBridge needs the fillable PDF."
+        : "No files picked yet — choose or drop at least one packet file (the VR1884, the SA, or the EAS), then read the packet.");
+      return;
+    }
+    setStatus("Reading packet…");
+    try {
+      var fields = staged["1884"] ? staged["1884"].fields : null;
+      var saText = staged["SA"] ? staged["SA"].text : null;
+      var easText = staged["EAS"] ? staged["EAS"].text : null;
       var record = window.PacketBridgeExtract.buildRecord(fields, saText, easText);
       renderReadout(record);
       if (window.PBDetails && window.PBDetails.onRecord) window.PBDetails.onRecord(record);
       var missingDocs = (record.derived && record.derived.missingDocuments) || [];
-      setStatus("Done. Readout is below" + (missingDocs.length ? " — note: this packet was read without " + missingDocs.join(", ") + "; the readout lists what is missing." : "."));
+      setStatus("Done. Readout is below" + (missingDocs.length ? " — note: this packet was read without " + missingDocs.join(", ") + "; the readout lists what is missing." : ".") +
+        (flat1884Name ? " (The VR1884 file " + flat1884Name + " could not be read — it has no fillable form fields.)" : ""));
       document.getElementById("readout-h").setAttribute("tabindex", "-1");
       document.getElementById("readout-h").focus({ preventScroll: false });
     } catch (err) {

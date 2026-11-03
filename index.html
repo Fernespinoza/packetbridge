@@ -20,6 +20,9 @@
   .tagline { margin: 0; font-size: 1.05rem; }
   .privacy { background: #14532d; color: #fff; padding: 0.6rem 0.9rem; border-radius: 0.4rem; }
   @media (prefers-color-scheme: dark) { .privacy { background: #166534; } }
+  #drop-zone.dragging { outline: 3px dashed #14532d; outline-offset: -6px; }
+  #staged-list { list-style: none; padding-left: 0; }
+  #staged-list li { margin: 0.25rem 0; }
   fieldset { border: 2px solid currentColor; border-radius: 0.4rem; margin: 1rem 0; }
   legend { font-weight: 700; padding: 0 0.4rem; }
   .field { margin: 0.9rem 0; }
@@ -64,23 +67,19 @@
   <section aria-labelledby="load-h">
     <h2 id="load-h">1. Load the referral packet</h2>
     <form id="packet-form">
-      <fieldset>
+      <fieldset id="drop-zone">
         <legend>Referral packet files (PDF)</legend>
-        <p>Load whichever files you have — all three, two, or even one. The readout lists any
-           missing pieces, and its conflict checks only compare the documents you loaded, so a
-           partial packet can still be checked and the gaps reported to the counselor.</p>
+        <p>Pick or drop the packet files in <strong>any order</strong> — PacketBridge identifies each
+           document itself, so you never have to match a file to a labeled slot. Load all three,
+           two, or even one. The readout lists any missing pieces, and its conflict checks only
+           compare the documents you loaded, so a partial packet can still be checked and the
+           gaps reported to the counselor.</p>
         <div class="field">
-          <label for="f1884">VR1884 Referral (recommended)</label>
-          <input type="file" id="f1884" accept="application/pdf,.pdf">
+          <label for="packet-files">Referral packet PDFs — pick one or more, or drop the files anywhere in this box</label>
+          <input type="file" id="packet-files" accept="application/pdf,.pdf" multiple>
         </div>
-        <div class="field">
-          <label for="fsa">Service Authorization — SA (recommended)</label>
-          <input type="file" id="fsa" accept="application/pdf,.pdf">
-        </div>
-        <div class="field">
-          <label for="feas">EAS Consultation Report (recommended)</label>
-          <input type="file" id="feas" accept="application/pdf,.pdf">
-        </div>
+        <ul id="staged-list" aria-live="polite"></ul>
+        <p><button type="button" id="clear-files">Clear files</button></p>
       </fieldset>
       <button type="submit" id="read-btn">Read packet</button>
     </form>
@@ -185,7 +184,7 @@
   <section aria-labelledby="next-h">
     <h2 id="next-h">Coming next</h2>
     <p>PacketBridge now covers the full path: referral in, readout, report form, and the filled report packet out. Remaining work is hardening against more real-world packet variations.</p>
-    <p class="version">PacketBridge v0.8.4 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Partial packets accepted: load any of the three referral files and the readout lists what's missing. Every fact in the readout is labeled with the document it came from; missing info is highlighted yellow and conflicts red. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+    <p class="version">PacketBridge v0.9.0 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Partial packets accepted: load any of the three referral files and the readout lists what's missing. Every fact in the readout is labeled with the document it came from; missing info is highlighted yellow and conflicts red. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
   </section>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>

@@ -454,7 +454,28 @@
     return q;
   }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions };
+  /* Document self-identification (Fernando's direction, 2026-11-02, after
+     he swapped the SA and EAS slots by accident and got a readout full of
+     "not found"): the loader takes the packet files in any order and sorts
+     them itself, so nobody has to match a file to a labeled slot. The 1884
+     is identified by its AcroForm sentinel fields; the SA and EAS by
+     content markers that appear on those forms and not on the others
+     (the SA needs BOTH markers — the generated VR2902's text contains
+     "Service Authorization Number" inside "Customer Service Authorization
+     Number" but never a TWC CCS line). */
+  function is1884Fields(fields) {
+    return !!fields &&
+      Object.prototype.hasOwnProperty.call(fields, "Customers Name") &&
+      Object.prototype.hasOwnProperty.call(fields, "VR Counselor Name");
+  }
+  function classifyText(text) {
+    if (!text) return null;
+    if (/Service Authorization Number:/.test(text) && /TWC CCS Name\/Number:/.test(text)) return "SA";
+    if (/EAS Consultation Report/.test(text) || /EAS Initial Consultation Report/.test(text)) return "EAS";
+    return null;
+  }
+
+  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);
