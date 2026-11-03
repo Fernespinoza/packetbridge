@@ -103,19 +103,40 @@
     });
     if (!d.subjects.length)
       warnings.push("No VR2902 subjects selected — the generated packet will have no assessments.");
+    /* Teach only what is authorized (referral-review checklist §6): a
+       selected VR2902 subject the packet does not call for gets a warning.
+       The packet's subjects are the 1884-derived ones; when the packet
+       derived none (usually no 1884), the EAS suggestions stand in. */
+    if (record && record.derived) {
+      var allowedSubj = {};
+      (record.derived.subjects2902 || []).forEach(function (x) { allowedSubj[x] = true; });
+      if (!Object.keys(allowedSubj).length)
+        (record.derived.suggestedSubjects || []).forEach(function (x) { allowedSubj[x.subject] = true; });
+      if (Object.keys(allowedSubj).length) {
+        d.subjects.forEach(function (subj) {
+          if (!allowedSubj[subj])
+            warnings.push(subj + " is selected, but this packet does not call for it — the packet calls for: " +
+              Object.keys(allowedSubj).join(", ") + ". Assess only authorized subjects; if the counselor authorized " +
+              subj + " another way, ignore this warning.");
+        });
+      }
+    }
     /* Authorized-limits guard (Fernando, 2026-11-02): planned session
        hours are totaled against the SA's authorized training hours, and
        session dates are checked against the SA window. Warnings, not
        blocks — the trainer may know something the packet doesn't say. */
     if (record && record.authorization && record.derived) {
+      var guardTripped = false;
       var totalHours = 0;
       d.sessions.forEach(function (s) { var h = parseFloat(s.hours); if (!isNaN(h)) totalHours += h; });
       var saH = record.derived.saHours || {};
       var authorized = saH.training > 0 ? saH.training : (saH.allHours || 0);
       function trimNum(n) { return Math.round(n * 100) / 100; }
-      if (authorized > 0 && totalHours > authorized)
+      if (authorized > 0 && totalHours > authorized) {
+        guardTripped = true;
         warnings.push("Sessions total " + trimNum(totalHours) + " hours, but the SA authorizes " + trimNum(authorized) +
           " hours of training — " + trimNum(totalHours - authorized) + " hours over the authorized limit.");
+      }
       function mdyToISO(v) {
         var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(v || ""));
         if (!m) return null;
@@ -126,11 +147,18 @@
       var winEnd = mdyToISO(record.authorization.endDate);
       if (winStart || winEnd) {
         d.sessions.forEach(function (s, i) {
-          if (s.date && ((winStart && s.date < winStart) || (winEnd && s.date > winEnd)))
+          if (s.date && ((winStart && s.date < winStart) || (winEnd && s.date > winEnd))) {
+            guardTripped = true;
             warnings.push("Session " + (i + 1) + " is dated " + s.date + ", outside the SA window (" +
               (record.authorization.startDate || "…") + " to " + (record.authorization.endDate || "…") + ").");
+          }
         });
       }
+      /* The actionable route for an authorization problem (checklist §4):
+         it is fixed by amending the SA, and amendments belong to the
+         issuer — say so wherever the guard warning surfaces. */
+      if (guardTripped)
+        warnings.push("Authorization problems like these are fixed with an SA amendment — ask the SA issuer (the TWC contact named on the SA) to amend the authorized hours or dates.");
     }
     if (d.mode === "complete" && sections) {
       d.subjects.forEach(function (subj) {

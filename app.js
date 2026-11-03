@@ -219,6 +219,7 @@
     if (rec.derived && rec.derived.baselineGap)
       missingList.push("⚠ Baseline VR2902: this SA funds a post-training assessment but no baseline. Ask the counselor: was a baseline VR2902 already completed (possibly under an earlier SA)? If so, request a copy — the post-training assessment should re-test the same subjects and tasks. If not, ask whether a baseline should be authorized before training begins.");
     (rec.derived && rec.derived.dateFlags || []).forEach(function (f) { missingList.push(f.text); });
+    (rec.derived && rec.derived.saMathProblems || []).forEach(function (prob) { missingList.push("⚠ SA math check: " + prob); });
     if (trainerFlag) missingList.push(trainerFlag);
     if (missingList.length) {
       var mSec = section("Missing from this packet", missingList);

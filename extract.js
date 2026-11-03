@@ -461,6 +461,25 @@
       if (docMs !== null && saRefMs !== null && (saRefMs - docMs) / DAY_MS > 183)
         dateFlags.push({ kind: "stale-" + row[2], text: "⚠ Date check: the " + row[0] + " is dated " + row[1] + " — more than 6 months older than the SA (issued " + (record.authorization.dateIssued || record.authorization.startDate) + "). Information that old may no longer match the customer's situation; confirm it is still current." });
     });
+    /* SA math check (referral-review checklist: "SA total math checks
+       out"): each line's qty × rate must equal its line total, and the
+       lines must add up to the stated total. Problems route to the SA
+       issuer as questions — the trainer never silently accepts bad math. */
+    function money(v) { var n = parseFloat(String(v === null || v === undefined ? "" : v).replace(/,/g, "")); return isNaN(n) ? null : n; }
+    var saMathProblems = [];
+    var lineSum = 0;
+    record.lineItems.forEach(function (i) {
+      var lt = money(i.totalCost), uc = money(i.unitCost), q = parseFloat(i.qty);
+      if (lt !== null) lineSum += lt;
+      if (lt !== null && uc !== null && !isNaN(q) && Math.abs(q * uc - lt) > 0.005)
+        saMathProblems.push("SA line item \"" + i.description + "\": " + i.qty + " x $" + i.unitCost +
+          " comes to $" + (Math.round(q * uc * 100) / 100) + ", not the $" + i.totalCost + " printed on the SA.");
+    });
+    var statedTotal = money(record.authorization.totalCost);
+    if (statedTotal !== null && record.lineItems.length && Math.abs(lineSum - statedTotal) > 0.005)
+      saMathProblems.push("SA total: the line items add up to $" + (Math.round(lineSum * 100) / 100) +
+        ", but the SA states a total of $" + record.authorization.totalCost + ".");
+
     /* Authorized hours from the SA line items (the details form checks
        planned session hours against these). */
     var saHoursTraining = 0, saHoursAll = 0;
@@ -493,6 +512,7 @@
       saStatus: saStatus,
       docDates: { eas: e.consultDate || null, referral: record.referral.date || null, saIssued: record.authorization.dateIssued || null },
       saHours: { training: saHoursTraining, allHours: saHoursAll },
+      saMathProblems: saMathProblems,
       conflicts: conflicts,
       missingDocuments: missingDocuments,
       easGapFilled: gapFilled,
@@ -756,6 +776,9 @@
     var prereqs = opts.prereqs || {};
     if (d.baselineGap && !prereqs.baselineCopyReceived)
       groups.counselor.push("Was a baseline VR2902 already completed (possibly under an earlier SA)? If so, please send a copy — the post-training assessment should re-test the same subjects and tasks. If not, should a baseline be authorized before training begins?");
+    (d.saMathProblems || []).forEach(function (prob) {
+      groups.issuer.push("Please check the SA math — " + prob + " A corrected SA may be needed.");
+    });
     (d.dateFlags || []).forEach(function (f) {
       if (f.kind === "sa-expired")
         groups.issuer.push("This SA expired on " + record.authorization.endDate + " — will a new authorization be issued, or will this one be extended?");
@@ -771,6 +794,7 @@
       if (!record.customer.name) groups.counselor.push("What is the customer's full name? None of the documents in this packet give it.");
       if (!record.counselor.name) groups.counselor.push("Who is the VR counselor for this case? The packet does not name one.");
       if (!record.counselor.phone) groups.counselor.push("What is the counselor's phone number? It is not in this packet.");
+      if (!record.referral.date) groups.counselor.push("What is the referral date? The VR1884 does not show one.");
       if (!record.training.deliveryMethod) groups.counselor.push("Which delivery method is approved for this training (in person, remote, or a mix)? The packet does not say.");
       if (!record.training.locations || !record.training.locations.length)
         groups.counselor.push("Where should the training take place? No training location is marked in this packet.");
@@ -812,9 +836,9 @@
       items.push(item("Authorization current", "pass", "The SA is inside its window (" + record.authorization.startDate + " to " + record.authorization.endDate + ")."));
     else
       items.push(item("Authorization current", "check", "The SA's dates could not be read."));
-    var nConf = (d.conflicts || []).length;
+    var nConf = (d.conflicts || []).length + (d.saMathProblems || []).length;
     if (nConf)
-      items.push(item("Documents agree", "check", nConf + " conflict" + (nConf === 1 ? "" : "s") + " to resolve with the counselor (listed below)."));
+      items.push(item("Documents agree", "check", nConf + " conflict" + (nConf === 1 ? "" : "s") + "/SA-math problem" + (nConf === 1 ? "" : "s") + " to resolve (listed below)."));
     else if (missing.length >= 2)
       items.push(item("Documents agree", "check", "Only one document was loaded, so nothing could be cross-checked."));
     else
