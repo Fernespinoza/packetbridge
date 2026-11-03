@@ -36,6 +36,12 @@
     if (record && record.derived && record.derived.subjects2902) {
       subjects = record.derived.subjects2902.slice();
     }
+    /* No subjects from the 1884 (usually: no 1884 loaded) — fall back to
+       the EAS-derived suggestions so the baseline form still opens with a
+       useful pre-check. The readout labels them as suggestions. */
+    if (!subjects.length && record && record.derived && record.derived.suggestedSubjects) {
+      subjects = record.derived.suggestedSubjects.map(function (s) { return s.subject; });
+    }
     return {
       mode: "prep", /* "prep" = ratings blank | "complete" = ratings entered */
       reportDate: todayISO(),

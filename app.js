@@ -156,6 +156,11 @@
     });
     trainingItems.push("Assessment subjects for the VR2902s: " + (rec.derived.subjects2902.length ? rec.derived.subjects2902.join(", ") : "none derived"));
     rec.derived.subjectNotes.forEach(function (n) { trainingItems.push("Note: " + n); });
+    if (rec.derived.suggestedSubjects && rec.derived.suggestedSubjects.length) {
+      trainingItems.push("Suggested subjects from the EAS recommendations (suggestions only — the 1884 decides when one is loaded): " +
+        rec.derived.suggestedSubjects.map(function (s) { return s.subject + " (" + s.reason + ")"; }).join("; "));
+    }
+    (rec.derived.suggestionNotes || []).forEach(function (n) { trainingItems.push("Note: " + n); });
     trainingItems.push("Documents this packet needs: " + (rec.derived.documentsToGenerate.length ? rec.derived.documentsToGenerate.join(", ") : "none detected — check the SA"));
     if (tr.unknownTopicStates.length)
       trainingItems.push("Could not read the checkbox state for: " + tr.unknownTopicStates.join(", ") + " — check the paper 1884 for these topics.");

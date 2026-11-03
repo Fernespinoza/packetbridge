@@ -197,6 +197,20 @@
       secondaryDisability: find(text, /Secondary Disability:\s*([^\n]+)/),
       fieldRestrictionOD: find(text, /Field Restriction OD:\s*([^\n]+)/),
       fieldRestrictionOS: find(text, /Field Restriction OS:\s*([^\n]+)/),
+      /* Recommendation signals for suggested VR2902 subjects: the products
+         the EAS consultant checked (lines beginning with the X mark), the
+         "determine training needs in ..." sentence, and any OCR-software
+         mention in the evaluations. */
+      checkedItems: (function () {
+        var items = [];
+        text.split("\n").forEach(function (line) {
+          var mm = line.match(/^\s*X\s+(.+?)\s*$/);
+          if (mm) items.push(clean(mm[1].replace(/\s*Notes:.*$/, "")));
+        });
+        return items;
+      })(),
+      trainingNeedsText: find(text, /determine training needs in ([^.]+)\./),
+      ocrSoftware: /OCR software/i.test(text),
       homeHardware: find(text, /Technology at home\s*\nHardware:\s*([^\n]+)/),
       homeSoftware: find(text, /Technology at home\s*\nHardware:[^\n]*\nSoftware:\s*([^\n]+)/),
       office: {
@@ -289,6 +303,32 @@
       fillFrom("current software", e.homeSoftware, function (v) { c.currentSoftware = v; });
     if (!record.counselor.name && e.vrc) { record.counselor.name = e.vrc; gapFilled.push("counselor name"); }
 
+    /* Suggested VR2902 subjects from the EAS recommendations — suggestions
+       only. The 1884's topics decide the real list (subjects2902); these
+       exist for packets where the 1884 is missing or silent, and every
+       suggestion carries the EAS signal it came from. */
+    var sugg = {}, suggNotes = [];
+    function suggest(subject, reason) { if (!sugg[subject]) sugg[subject] = reason; }
+    (e.checkedItems || []).forEach(function (item) {
+      if (/fusion/i.test(item)) {
+        suggest("Screen Reader", "Fusion checked on the EAS");
+        suggest("Screen Magnification", "Fusion checked on the EAS");
+      } else if (/jaws/i.test(item)) suggest("Screen Reader", "JAWS checked on the EAS");
+      else if (/zoomtext/i.test(item)) suggest("Screen Magnification", "ZoomText checked on the EAS");
+    });
+    if (e.trainingNeedsText) {
+      e.trainingNeedsText.split(/,| and /).map(function (s) { return s.trim(); }).filter(Boolean)
+        .forEach(function (need) {
+          if (/excel|spreadsheet/i.test(need)) suggest("Spreadsheet", "EAS training need: " + need);
+          else if (/internet/i.test(need)) suggest("Internet", "EAS training need: " + need);
+          else if (/computer access/i.test(need)) suggest("Microsoft Windows", "EAS training need: " + need);
+          else if (/microsoft word|\bword\b/i.test(need)) suggest("Microsoft Word", "EAS training need: " + need);
+          else suggNotes.push("No VR2902 subject exists for EAS training need: " + need + " (objective text only)");
+        });
+    }
+    if (e.ocrSoftware) suggest("Optical Character Recognition (OCR)", "EAS evaluations mention OCR software");
+    var suggestedSubjects = Object.keys(sugg).sort().map(function (s) { return { subject: s, reason: sugg[s] }; });
+
     var subj = subjectsFor(record.training.topics);
     var docs = [];
     record.lineItems.forEach(function (i) {
@@ -302,7 +342,9 @@
       documentsToGenerate: docs,
       conflicts: conflicts,
       missingDocuments: missingDocuments,
-      easGapFilled: gapFilled
+      easGapFilled: gapFilled,
+      suggestedSubjects: suggestedSubjects,
+      suggestionNotes: suggNotes
     };
     return record;
   }
