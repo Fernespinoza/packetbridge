@@ -124,7 +124,10 @@
       "Current hardware: " + val(c.currentHardware),
       "Current software: " + val(c.currentSoftware),
       c.notes ? "Notes: " + c.notes : null,
-      "Best days to contact: " + val(c.bestDaysToContact)
+      "Best days to contact: " + val(c.bestDaysToContact),
+      (rec.derived.easGapFilled && rec.derived.easGapFilled.length)
+        ? "Sourced from the EAS where the packet has no 1884 value: " + rec.derived.easGapFilled.join(", ") + "."
+        : null
     ];
     frag.appendChild(section("What we have — customer", have));
 

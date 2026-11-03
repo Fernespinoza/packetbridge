@@ -194,6 +194,9 @@
       visualDisability: find(text, /Visual Disability:\s*([^\n]+)/),
       acuityOD: find(text, /Visual Acuities OD:\s*(\S+)/),
       acuityOS: find(text, /Visual Acuities OS:\s*(\S+)/),
+      secondaryDisability: find(text, /Secondary Disability:\s*([^\n]+)/),
+      fieldRestrictionOD: find(text, /Field Restriction OD:\s*([^\n]+)/),
+      fieldRestrictionOS: find(text, /Field Restriction OS:\s*([^\n]+)/),
       homeHardware: find(text, /Technology at home\s*\nHardware:\s*([^\n]+)/),
       homeSoftware: find(text, /Technology at home\s*\nHardware:[^\n]*\nSoftware:\s*([^\n]+)/),
       office: {
@@ -261,6 +264,31 @@
         conflicts.push(row[0] + ": 1884 \"" + row[1] + "\" vs SA \"" + row[2] + "\"");
     });
 
+    /* Gap-fill (crosswalk rule: the 1884 is authoritative, the EAS is
+       background/gap-fill only). Runs AFTER the conflict checks above,
+       which compare the raw sources; here the EAS supplies customer and
+       counselor values the 1884 does not have — most importantly when no
+       1884 was loaded at all, where otherwise the readout shows a wall of
+       "not found" for facts the EAS states plainly. */
+    var gapFilled = [];
+    function fillFrom(label, value, apply) { if (value) { apply(value); gapFilled.push(label); } }
+    if (!c.diagnosis) fillFrom("visual diagnosis", e.visualDisability, function (v) { c.diagnosis = v; });
+    if (!c.acuityOD) fillFrom("acuity OD", e.acuityOD, function (v) { c.acuityOD = v; });
+    if (!c.acuityOS) fillFrom("acuity OS", e.acuityOS, function (v) { c.acuityOS = v; });
+    if (!c.visualFields) {
+      var vfParts = [];
+      if (e.fieldRestrictionOD && e.fieldRestrictionOD !== "N/A") vfParts.push("OD: " + e.fieldRestrictionOD);
+      if (e.fieldRestrictionOS && e.fieldRestrictionOS !== "N/A") vfParts.push("OS: " + e.fieldRestrictionOS);
+      if (vfParts.length) { c.visualFields = vfParts.join("; "); gapFilled.push("visual fields"); }
+    }
+    if (!c.goal) fillFrom("vocational goal", e.goal, function (v) { c.goal = v; });
+    if (!c.secondaryDisability) fillFrom("secondary disability", e.secondaryDisability, function (v) { c.secondaryDisability = v; });
+    if (!c.currentHardware && e.homeHardware && e.homeHardware !== "N/A")
+      fillFrom("current hardware", e.homeHardware, function (v) { c.currentHardware = v; });
+    if (!c.currentSoftware && e.homeSoftware && e.homeSoftware !== "N/A")
+      fillFrom("current software", e.homeSoftware, function (v) { c.currentSoftware = v; });
+    if (!record.counselor.name && e.vrc) { record.counselor.name = e.vrc; gapFilled.push("counselor name"); }
+
     var subj = subjectsFor(record.training.topics);
     var docs = [];
     record.lineItems.forEach(function (i) {
@@ -273,7 +301,8 @@
       subjectNotes: subj.notes,
       documentsToGenerate: docs,
       conflicts: conflicts,
-      missingDocuments: missingDocuments
+      missingDocuments: missingDocuments,
+      easGapFilled: gapFilled
     };
     return record;
   }
