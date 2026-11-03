@@ -99,7 +99,7 @@
      fact is labeled with the document it came from; missing info is
      highlighted yellow; conflicts are highlighted red via .conflict). */
   function txt(s) { return document.createTextNode(String(s)); }
-  function missSpan() { var s = el("span", "— not found —"); s.className = "missing"; return s; }
+  function missSpan() { var s = el("span", "⚠ — not found —"); s.className = "missing"; return s; }
   function piece(v, src) {
     if (v === null || v === undefined || v === "") return missSpan();
     return txt(src ? v + " (from the " + src + ")" : v);
@@ -130,7 +130,7 @@
     var missingDocs = (rec.derived && rec.derived.missingDocuments) || [];
     if (missingDocs.length) {
       var mSec = section("Missing from this packet", missingDocs.map(function (d) {
-        return "Missing: " + d;
+        return "⚠ Missing: " + d;
       }));
       mSec.querySelectorAll("li").forEach(function (li) { li.className = "missing-line"; });
       frag.appendChild(mSec);
