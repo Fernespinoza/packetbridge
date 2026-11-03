@@ -70,6 +70,22 @@
     return pages.join("\n");
   }
 
+  /* Positioned items for the flattened-1884 parser: pdf.js items carry
+     their print coordinates, which the flat layout is keyed to. */
+  async function readPdfItems(file) {
+    var buf = await file.arrayBuffer();
+    var doc = await pdfjsLib.getDocument({ data: buf }).promise;
+    var pages = [];
+    for (var p = 1; p <= doc.numPages; p++) {
+      var page = await doc.getPage(p);
+      var tc = await page.getTextContent();
+      pages.push({ items: tc.items.map(function (item) {
+        return { str: item.str, x: item.transform[4], y: item.transform[5], w: item.width || 0 };
+      }) });
+    }
+    return pages;
+  }
+
   function el(tag, text) {
     var n = document.createElement(tag);
     if (text !== undefined && text !== null) n.textContent = String(text);
@@ -126,6 +142,8 @@
       (rec.eas && rec.eas.reportFor) || null;
     frag.appendChild(el("h2", "Packet for " + val(packetName) +
       (packetName && sc.name ? " (from the " + sc.name + ")" : "")));
+    if (rec.derived && rec.derived.referralFlattened)
+      frag.appendChild(el("p", "Note: the VR1884 in this packet is a flattened print, so its values were read from the printed text rather than from form fields — double-check them."));
 
     var missingDocs = (rec.derived && rec.derived.missingDocuments) || [];
     var missingList = missingDocs.map(function (d) { return "⚠ Missing: " + d; });
@@ -261,7 +279,8 @@
     ["1884", "SA", "EAS"].forEach(function (kind) {
       if (!staged[kind]) return;
       var li = document.createElement("li");
-      li.textContent = "✓ " + staged[kind].name + " — identified as the " + KIND_LABEL[kind];
+      li.textContent = "✓ " + staged[kind].name + " — identified as the " + KIND_LABEL[kind] +
+        (staged[kind].flat ? " (flattened print — values read from the printed text)" : "");
       host.appendChild(li);
     });
     if (flat1884Name) {
@@ -290,7 +309,12 @@
         try { text = await readPdfText(file); } catch (e) { text = null; }
         kind = text ? window.PacketBridgeExtract.classifyText(text) : null;
         if (!kind && text && (!fields || Object.keys(fields).length === 0) && window.PacketBridgeExtract.isFlat1884Text(text)) {
-          /* A referral with no fillable fields at all: flattened/scanned. */
+          /* A flattened VR1884 (TWC system print): no form fields, but its
+             values are in the positioned print text — parse them. */
+          var flatParsed = null;
+          try { flatParsed = window.PacketBridgeExtract.parseFlat1884(await readPdfItems(file)); } catch (e) { flatParsed = null; }
+          if (flatParsed && !staged["1884"]) { staged["1884"] = { name: file.name, fields: null, text: text, flat: flatParsed }; continue; }
+          if (flatParsed) { stagedNotes.push({ name: file.name, text: file.name + " — also a VR1884 Referral; keeping " + staged["1884"].name }); continue; }
           if (!flat1884Name && !staged["1884"]) flat1884Name = file.name;
           else stagedNotes.push({ name: file.name, text: file.name + " — another flattened VR1884; only one can be used" });
           continue;
@@ -343,7 +367,8 @@
       var fields = staged["1884"] ? staged["1884"].fields : null;
       var saText = staged["SA"] ? staged["SA"].text : null;
       var easText = staged["EAS"] ? staged["EAS"].text : null;
-      var record = window.PacketBridgeExtract.buildRecord(fields, saText, easText);
+      var record = window.PacketBridgeExtract.buildRecord(fields, saText, easText,
+        staged["1884"] && staged["1884"].flat ? staged["1884"].flat : null);
       renderReadout(record);
       if (window.PBDetails && window.PBDetails.onRecord) window.PBDetails.onRecord(record);
       var missingDocs = (record.derived && record.derived.missingDocuments) || [];

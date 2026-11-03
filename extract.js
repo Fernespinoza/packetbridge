@@ -271,16 +271,16 @@
      both present (every check below already guards on both sides having a
      value), and derived.missingDocuments names the absent pieces so the
      readout can list them for the counselor. */
-  function buildRecord(fields1884, saText, easText) {
+  function buildRecord(fields1884, saText, easText, flat1884) {
     var record = {};
     var missingDocuments = [];
-    if (fields1884 === null || fields1884 === undefined) missingDocuments.push("VR1884 Referral");
+    if ((fields1884 === null || fields1884 === undefined) && !flat1884) missingDocuments.push("VR1884 Referral");
     if (saText === null || saText === undefined) missingDocuments.push("Service Authorization (SA)");
     if (easText === null || easText === undefined) missingDocuments.push("EAS Consultation Report");
-    var a = parse1884(fields1884 || {}); Object.assign(record, a);
+    var a = flat1884 || parse1884(fields1884 || {}); Object.assign(record, a);
     /* A fillable 1884 with nothing filled in is a different problem from a
        missing one: it loads fine but says nothing. Detect and say so. */
-    var referralBlank = fields1884 !== null && fields1884 !== undefined &&
+    var referralBlank = !flat1884 && fields1884 !== null && fields1884 !== undefined &&
       !a.customer.name && !a.counselor.name && !(a.training.topics || []).length && !a.training.deliveryMethod;
     if (saText) Object.assign(record, parseSA(saText));
     if (easText) Object.assign(record, parseEAS(easText));
@@ -406,6 +406,7 @@
          training runs). Fernando's call, 2026-11-02. */
       baselineGap: docs.indexOf("VR2902 Post-Training") !== -1 && docs.indexOf("VR2902 Baseline") === -1,
       referralBlank: referralBlank,
+      referralFlattened: !!flat1884,
       conflicts: conflicts,
       missingDocuments: missingDocuments,
       easGapFilled: gapFilled,
@@ -414,6 +415,229 @@
       suggestionNotes: suggNotes
     };
     return record;
+  }
+
+  /* Flattened VR1884 — the TWC system print layout ("vr1884-twc" files):
+     the filled form rendered to plain positioned text, no AcroForm fields.
+     Layout rules of this print (verified against a real print, 2026-11-02):
+     page 1 prints label rows with the values ~10pt BELOW each label row,
+     in columns under their labels; page 2 prints checkbox options with a
+     ■ glyph beside the chosen ones, and topic descriptions just after
+     each topic label. Input is positioned items per page:
+     [{items: [{str, x, y, w}]}]. Returns the same shape as parse1884, or
+     null when the layout anchors are absent. Values the print leaves
+     blank — including its "N/A" placeholders — come back null, so the
+     readout reports them missing instead of guessed. */
+  function parseFlat1884(pages) {
+    if (!pages || !pages.length) return null;
+    function nz(s) { return String(s == null ? "" : s).replace(/’/g, "'").replace(/\s+/g, " ").trim(); }
+    function naVal(v) { v = nz(v); return v && !/^n\/?a$/i.test(v) ? v : null; }
+    function findLabel(items, prefix, minY) {
+      var want = nz(prefix).toLowerCase();
+      for (var i = 0; i < items.length; i++) {
+        if (nz(items[i].str).toLowerCase().indexOf(want) === 0 && (minY === undefined || items[i].y >= minY)) return items[i];
+      }
+      return null;
+    }
+
+    /* ---- page 1: label rows, values below, columns by label x ---- */
+    var p1 = (pages[0] && pages[0].items) || [];
+    if (!findLabel(p1, "VR Counselor Name:") || !findLabel(p1, "Customer's Name:")) return null;
+    var rows1 = [
+      [["serviceRequested", "Service Requested:"]],
+      [["counselorName", "VR Counselor Name:"], ["counselorCaseload", "Caseload Number:"], ["counselorPhone", "Contact Number"]],
+      [["trainerNamed", "Trainer Name and Contractor Agency:"], ["referralDate", "Date of Referral:"]],
+      [["custName", "Customer's Name:"], ["dob", "Customer's date of birth"], ["language", "Customer's Primary Language:"]],
+      [["street", "Customer's street address:"], ["city", "City:"], ["state", "State:"], ["zip", "ZIP Code:"]],
+      [["phone", "Customer's Contact Number"], ["altPhone", "Alternate Contact Number"]],
+      [["bestDays", "Best Day(s) to Contact"]],
+      [["goal", "Customer's Educational and/or Vocational Goal(s):"]],
+      [["diagnosis", "Visual Diagnosis:"]],
+      [["__skip", "Visual Acuity:"], ["acuityOD", "O D (right eye):"], ["acuityOS", "O S (left eye):"], ["visualFields", "Visual Fields:"]],
+      [["notes", "Other Additional Information:"]],
+      [["secondary", "Secondary Disability:"]],
+      [["primaryComm", "If secondary disability is deaf blindness"]],
+      [["education", "Level of Education:"], ["health", "Known Health Issues"]],
+      [["circumstances", "Additional Information:"]],
+      [["hardware", "List the customer's current hardware:"]],
+      [["software", "List the customer's current software:"]]
+    ];
+    var labelItems = new Set();
+    var rowDefs = [];
+    rows1.forEach(function (cols) {
+      var found = [];
+      cols.forEach(function (c) {
+        var it = findLabel(p1, c[1]);
+        if (it) { labelItems.add(it); found.push({ key: c[0], item: it }); }
+      });
+      if (found.length) rowDefs.push(found);
+    });
+    var vals = {};
+    p1.forEach(function (it) {
+      if (labelItems.has(it) || !nz(it.str)) return;
+      var best = null, bestD = 1e9;
+      rowDefs.forEach(function (cols) {
+        var d = cols[0].item.y - it.y;
+        if (d >= 3 && d <= 16 && d < bestD) { bestD = d; best = cols; }
+      });
+      if (!best) return;
+      var col = best[0];
+      if (best.length > 1) {
+        col = best[best.length - 1];
+        for (var j = 0; j < best.length - 1; j++) {
+          if (it.x < (best[j].item.x + best[j + 1].item.x) / 2) { col = best[j]; break; }
+        }
+      }
+      (vals[col.key] = vals[col.key] || []).push(it);
+    });
+    function val(key) {
+      var arr = vals[key];
+      if (!arr) return null;
+      arr.sort(function (a, b) { return a.x - b.x; });
+      return naVal(arr.map(function (i) { return i.str; }).join(" "));
+    }
+
+    /* ---- page 2: ■-marked choices, descriptions after labels ---- */
+    var p2 = (pages[1] && pages[1].items) || [];
+    var p2Labels = new Set();
+    p2.forEach(function (it) { if (nz(it.str) === "■") p2Labels.add(it); });
+    function regLabel(it) { if (it) p2Labels.add(it); return it; }
+    function checkedNear(labelItem) {
+      if (!labelItem) return false;
+      return p2.some(function (it) {
+        /* the mark sits ~20pt left of ITS label — a mark from the other
+           column (or another row's) must not count */
+        return nz(it.str) === "■" && it.x < labelItem.x && labelItem.x - it.x <= 30 && Math.abs(it.y - labelItem.y) <= 4;
+      });
+    }
+    function descAfter(labelItem) {
+      if (!labelItem) return null;
+      var endX = labelItem.x + (labelItem.w || 0);
+      var cands = p2.filter(function (it) {
+        return !p2Labels.has(it) && nz(it.str) && nz(it.str) !== ":" && it.x >= endX - 2 &&
+          it.y >= labelItem.y - 7 && it.y <= labelItem.y + 15;
+      });
+      cands.sort(function (a, b) { return a.x - b.x; });
+      return naVal(cands.map(function (i) { return i.str; }).join(" "));
+    }
+
+    var TOPIC_BY_NORM = {};
+    /* punctuation-insensitive matching: the print writes "stand-alone"
+       where the form field says "standalone", commas everywhere, etc. */
+    function normKey(t) { return nz(t).toLowerCase().replace(/[^a-z0-9]+/g, ""); }
+    TOPICS.forEach(function (t) { TOPIC_BY_NORM[normKey(t)] = t; });
+    var topicStarts = ["Key Boarding Skills", "Setting up the Workstation", "Operating Feature",
+      "Screen Readers", "The Word Processor", "The Internet and the World Wide Web",
+      "Viewing and Creating Microsoft PowerPoint", "Viewing and Creating Spreadsheets",
+      "OCR Software", "Braille Note Takers", "Mobile Operating Systems",
+      "Computer Skills and Mobile Operating System Skills"];
+    var topics = [];
+    topicStarts.forEach(function (start) {
+      var first = findLabel(p2, start);
+      if (!first) return;
+      regLabel(first);
+      /* a wrapped label's second line sits ~14pt below at the same x */
+      var cont = null;
+      p2.forEach(function (it) {
+        if (it !== first && Math.abs(it.x - first.x) <= 4 && first.y - it.y >= 8 && first.y - it.y <= 18 &&
+            topicStarts.every(function (s2) { return nz(it.str).toLowerCase().indexOf(nz(s2).toLowerCase()) !== 0; }))
+          cont = it;
+      });
+      if (cont) regLabel(cont);
+      var labelText = nz(first.str) + (cont ? " " + nz(cont.str) : "");
+      var key = TOPIC_BY_NORM[normKey(labelText)];
+      if (!key) { /* a wrapped label read in part still maps to its topic */
+        var ln = normKey(labelText);
+        Object.keys(TOPIC_BY_NORM).forEach(function (k) {
+          if (!key && (k.indexOf(ln) === 0 || ln.indexOf(k) === 0)) key = TOPIC_BY_NORM[k];
+        });
+      }
+      if (!key) return;
+      var desc = descAfter(cont || first);
+      if (checkedNear(first) || desc) topics.push({ topic: key, label: topicLabel(key), description: desc || "" });
+    });
+    var otherTopicLabel = null;
+    p2.forEach(function (it) { if (nz(it.str) === "Other:" && it.y > 400) otherTopicLabel = it; });
+    if (otherTopicLabel) {
+      regLabel(otherTopicLabel);
+      var otherDesc = descAfter(otherTopicLabel);
+      if (checkedNear(otherTopicLabel) || otherDesc)
+        topics.push({ topic: "Other Training Topics", label: topicLabel("Other Training Topics"), description: otherDesc || "" });
+    }
+
+    var delivery = null;
+    [["Only in-person"], ["Only remotely"], ["In person and/or remote as dependent on customer"]].forEach(function (o) {
+      var it = regLabel(findLabel(p2, o[0]));
+      if (it && checkedNear(it)) delivery = nz(it.str).replace("in-person", "in person");
+    });
+    if (delivery && delivery.indexOf("In person and/or remote") === 0)
+      delivery = "In person and/or remote as dependent on customer's needs";
+
+    var locations = [];
+    [["Customer's home/family home", "Customer's home / family home"],
+     ["Customer's work site", "Customer's work site"],
+     ["Customer's school or vocational training site", "Customer's school / vocational training site"],
+     ["AT service provider's facility", "AT service provider's facility"],
+     ["Unknown", "Unknown"]].forEach(function (pair) {
+      var it = regLabel(findLabel(p2, pair[0]));
+      if (it && checkedNear(it)) locations.push(pair[1]);
+    });
+    var otherLoc = regLabel(findLabel(p2, "Other (specify):"));
+    if (otherLoc && checkedNear(otherLoc)) {
+      var od = descAfter(otherLoc);
+      locations.push(od ? "Other: " + od : "Other (marked on the 1884, no description)");
+    }
+
+    var atEval = regLabel(findLabel(p2, "Assistive Technology Evaluation Report, if applicable"));
+    var refOther = null;
+    p2.forEach(function (it) { if (nz(it.str) === "Other:" && it.y <= 400) refOther = it; });
+    regLabel(refOther);
+    var commentsLabel = regLabel(findLabel(p2, "Additional Comments, if any"));
+
+    return {
+      referral: {
+        serviceRequested: val("serviceRequested"),
+        date: val("referralDate"),
+        trainerNamed: val("trainerNamed"),
+        atEvalProvided: checkedNear(atEval),
+        otherInfoProvided: checkedNear(refOther),
+        otherInfoDescription: descAfter(refOther)
+      },
+      customer: {
+        name: val("custName"),
+        dob: val("dob"),
+        phone: normPhone(val("phone")),
+        altPhone: normPhone(val("altPhone")),
+        language: val("language"),
+        education: val("education"),
+        goal: val("goal"),
+        diagnosis: val("diagnosis"),
+        acuityOD: val("acuityOD"),
+        acuityOS: val("acuityOS"),
+        visualFields: val("visualFields"),
+        secondaryDisability: val("secondary"),
+        primaryCommunication: val("primaryComm"),
+        healthIssues: val("health"),
+        currentHardware: val("hardware"),
+        currentSoftware: val("software"),
+        notes: val("notes"),
+        circumstances: val("circumstances"),
+        bestDaysToContact: val("bestDays"),
+        address: { street: val("street"), city: val("city"), state: val("state"), zip: val("zip") }
+      },
+      counselor: {
+        name: val("counselorName"),
+        caseload: val("counselorCaseload"),
+        phone: normPhone(val("counselorPhone"))
+      },
+      training: {
+        deliveryMethod: delivery,
+        deliveryComments: descAfter(commentsLabel),
+        locations: locations,
+        topics: topics,
+        unknownTopicStates: []
+      }
+    };
   }
 
   /* The counselor-facing summary of a readout: every missing item and
@@ -497,7 +721,7 @@
     return /VR1884/.test(t) && /Assistive Technology Services for Customers/.test(t);
   }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text };
+  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884 };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);
