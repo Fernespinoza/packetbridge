@@ -278,30 +278,57 @@
         conflicts.push(row[0] + ": 1884 \"" + row[1] + "\" vs SA \"" + row[2] + "\"");
     });
 
-    /* Gap-fill (crosswalk rule: the 1884 is authoritative, the EAS is
-       background/gap-fill only). Runs AFTER the conflict checks above,
-       which compare the raw sources; here the EAS supplies customer and
-       counselor values the 1884 does not have — most importantly when no
-       1884 was loaded at all, where otherwise the readout shows a wall of
-       "not found" for facts the EAS states plainly. */
+    /* Multi-source harvesting with provenance (Fernando's rule: check
+       every document for every fact, and label each fact with the document
+       it came from). Priority: the 1884 is authoritative for customer and
+       counselor facts; the SA supplies authorization data plus counselor
+       name/caseload when the 1884 is silent; the EAS gap-fills what
+       neither has. Runs AFTER the conflict checks above, which compare the
+       raw sources, so a harvested value can never mask a disagreement.
+       One deliberate exception: the counselor's PHONE is never taken from
+       the SA — the SA's contact number belongs to the TWC office contact,
+       not the counselor. */
+    var sources = { customer: {}, counselor: {} };
+    Object.keys(c).forEach(function (k) {
+      if (k !== "address" && c[k]) sources.customer[k] = "VR1884";
+    });
+    if (c.address && (c.address.street || c.address.city || c.address.zip)) sources.customer.address = "VR1884";
+    if (record.counselor.name) sources.counselor.name = "VR1884";
+    if (record.counselor.caseload) sources.counselor.caseload = "VR1884";
+    if (record.counselor.phone) sources.counselor.phone = "VR1884";
     var gapFilled = [];
-    function fillFrom(label, value, apply) { if (value) { apply(value); gapFilled.push(label); } }
-    if (!c.diagnosis) fillFrom("visual diagnosis", e.visualDisability, function (v) { c.diagnosis = v; });
-    if (!c.acuityOD) fillFrom("acuity OD", e.acuityOD, function (v) { c.acuityOD = v; });
-    if (!c.acuityOS) fillFrom("acuity OS", e.acuityOS, function (v) { c.acuityOS = v; });
+    function fillField(obj, key, label, value, srcMap, srcName) {
+      if (value) { obj[key] = value; gapFilled.push(label); if (srcMap) srcMap[key] = srcName || "EAS"; }
+    }
+    if (!c.diagnosis) fillField(c, "diagnosis", "visual diagnosis", e.visualDisability, sources.customer);
+    if (!c.acuityOD) fillField(c, "acuityOD", "acuity OD", e.acuityOD, sources.customer);
+    if (!c.acuityOS) fillField(c, "acuityOS", "acuity OS", e.acuityOS, sources.customer);
     if (!c.visualFields) {
       var vfParts = [];
       if (e.fieldRestrictionOD && e.fieldRestrictionOD !== "N/A") vfParts.push("OD: " + e.fieldRestrictionOD);
       if (e.fieldRestrictionOS && e.fieldRestrictionOS !== "N/A") vfParts.push("OS: " + e.fieldRestrictionOS);
-      if (vfParts.length) { c.visualFields = vfParts.join("; "); gapFilled.push("visual fields"); }
+      if (vfParts.length) { c.visualFields = vfParts.join("; "); gapFilled.push("visual fields"); sources.customer.visualFields = "EAS"; }
     }
-    if (!c.goal) fillFrom("vocational goal", e.goal, function (v) { c.goal = v; });
-    if (!c.secondaryDisability) fillFrom("secondary disability", e.secondaryDisability, function (v) { c.secondaryDisability = v; });
+    if (!c.goal) fillField(c, "goal", "vocational goal", e.goal, sources.customer);
+    if (!c.secondaryDisability) fillField(c, "secondaryDisability", "secondary disability", e.secondaryDisability, sources.customer);
     if (!c.currentHardware && e.homeHardware && e.homeHardware !== "N/A")
-      fillFrom("current hardware", e.homeHardware, function (v) { c.currentHardware = v; });
+      fillField(c, "currentHardware", "current hardware", e.homeHardware, sources.customer);
     if (!c.currentSoftware && e.homeSoftware && e.homeSoftware !== "N/A")
-      fillFrom("current software", e.homeSoftware, function (v) { c.currentSoftware = v; });
-    if (!record.counselor.name && e.vrc) { record.counselor.name = e.vrc; gapFilled.push("counselor name"); }
+      fillField(c, "currentSoftware", "current software", e.homeSoftware, sources.customer);
+    if (!c.name) {
+      if (record.authorization.customerName) fillField(c, "name", "customer name", record.authorization.customerName, sources.customer, "SA");
+      else if (e.reportFor) fillField(c, "name", "customer name", e.reportFor, sources.customer, "EAS");
+    }
+    if (!record.counselor.name) {
+      if (record.authorization.counselorName) fillField(record.counselor, "name", "counselor name", record.authorization.counselorName, sources.counselor, "SA");
+      else if (e.vrc) fillField(record.counselor, "name", "counselor name", e.vrc, sources.counselor, "EAS");
+    }
+    if (!record.counselor.caseload && record.authorization.counselorCaseload)
+      fillField(record.counselor, "caseload", "counselor caseload", record.authorization.counselorCaseload, sources.counselor, "SA");
+    record.sources = sources;
+    var caseIdSources = [];
+    if (record.authorization.caseId) caseIdSources.push("SA");
+    if (e.caseId) caseIdSources.push("EAS");
 
     /* Suggested VR2902 subjects from the EAS recommendations — suggestions
        only. The 1884's topics decide the real list (subjects2902); these
@@ -343,6 +370,7 @@
       conflicts: conflicts,
       missingDocuments: missingDocuments,
       easGapFilled: gapFilled,
+      caseIdSources: caseIdSources,
       suggestedSubjects: suggestedSubjects,
       suggestionNotes: suggNotes
     };

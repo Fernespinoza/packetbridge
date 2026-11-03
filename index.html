@@ -43,7 +43,9 @@
   #status { font-weight: 600; margin-top: 1rem; }
   #readout h2 { border-bottom: 2px solid currentColor; padding-bottom: 0.2rem; margin-top: 1.8rem; }
   #readout li { margin: 0.3rem 0; }
-  .conflict { font-weight: 600; }
+  .conflict { font-weight: 600; background: #fdecea; color: #8a1008; padding: 0.15rem 0.4rem; border-left: 4px solid #c0271a; }
+  .missing { background: #fff1a8; padding: 0 0.25rem; border-radius: 2px; }
+  li.missing-line { background: #fff7cc; padding: 0.15rem 0.4rem; border-left: 4px solid #d9a400; }
   .version { opacity: 0.75; font-size: 0.9rem; }
 </style>
 </head>
@@ -174,7 +176,7 @@
   <section aria-labelledby="next-h">
     <h2 id="next-h">Coming next</h2>
     <p>PacketBridge now covers the full path: referral in, readout, report form, and the filled report packet out. Remaining work is hardening against more real-world packet variations.</p>
-    <p class="version">PacketBridge v0.6.0 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Partial packets accepted: load any of the three referral files and the readout lists what's missing. When the 1884 is absent, the readout gap-fills customer facts from the EAS and suggests VR2902 subjects from the EAS recommendations. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
+    <p class="version">PacketBridge v0.7.0 — referral in, report packet out: extraction, readout, report form, rating grids, and PDF generation. Partial packets accepted: load any of the three referral files and the readout lists what's missing. Every fact in the readout is labeled with the document it came from; missing info is highlighted yellow and conflicts red. Templates verified against TWC on 2026-10-28: VR2868 rev 08/2025, VR2902 rev 06/2022.</p>
   </section>
 </main>
 <noscript><p>PacketBridge needs JavaScript enabled — all of it runs locally in your browser.</p></noscript>

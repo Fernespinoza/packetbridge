@@ -79,7 +79,10 @@
     var ul = el("ul");
     items.forEach(function (item) {
       if (item === null || item === undefined || item === "") return;
-      ul.appendChild(el("li", item));
+      var li = el("li");
+      if (typeof item === "string") li.textContent = item;
+      else li.appendChild(item);
+      ul.appendChild(li);
     });
     parent.appendChild(ul);
     return ul;
@@ -92,67 +95,92 @@
   }
   function val(v) { return (v === null || v === undefined || v === "") ? "— not found —" : v; }
 
+  /* Readout pieces with provenance + highlighting (Fernando's rules: every
+     fact is labeled with the document it came from; missing info is
+     highlighted yellow; conflicts are highlighted red via .conflict). */
+  function txt(s) { return document.createTextNode(String(s)); }
+  function missSpan() { var s = el("span", "— not found —"); s.className = "missing"; return s; }
+  function piece(v, src) {
+    if (v === null || v === undefined || v === "") return missSpan();
+    return txt(src ? v + " (from the " + src + ")" : v);
+  }
+  function line() {
+    var f = document.createDocumentFragment();
+    Array.prototype.forEach.call(arguments, function (part) {
+      if (part === null || part === undefined) return;
+      f.appendChild(typeof part === "string" ? txt(part) : part);
+    });
+    return f;
+  }
+
   function renderReadout(rec) {
     readoutEl.textContent = "";
     var frag = document.createDocumentFragment();
     var c = rec.customer, co = rec.counselor, au = rec.authorization || {}, tr = rec.training;
 
     /* A partial packet may have no 1884, so the customer's name can come
-       from the SA or the EAS instead. */
+       from the SA or the EAS instead (buildRecord harvests it and records
+       the source). */
+    var sc = (rec.sources && rec.sources.customer) || {};
     var packetName = c.name || (rec.authorization && rec.authorization.customerName) ||
       (rec.eas && rec.eas.reportFor) || null;
-    frag.appendChild(el("h2", "Packet for " + val(packetName)));
+    frag.appendChild(el("h2", "Packet for " + val(packetName) +
+      (packetName && sc.name ? " (from the " + sc.name + ")" : "")));
 
     var missingDocs = (rec.derived && rec.derived.missingDocuments) || [];
     if (missingDocs.length) {
-      frag.appendChild(section("Missing from this packet", missingDocs.map(function (d) {
+      var mSec = section("Missing from this packet", missingDocs.map(function (d) {
         return "Missing: " + d;
-      })));
+      }));
+      mSec.querySelectorAll("li").forEach(function (li) { li.className = "missing-line"; });
+      frag.appendChild(mSec);
     }
 
+    var addrText = [c.address.street, c.address.city, ((c.address.state || "") + " " + (c.address.zip || "")).trim()].filter(Boolean).join(", ");
     var have = [
-      "Date of birth: " + val(c.dob),
-      "Address: " + [c.address.street, c.address.city, ((c.address.state || "") + " " + (c.address.zip || "")).trim()].filter(Boolean).join(", "),
-      "Phone: " + val(c.phone) + (c.altPhone ? "  Alternate: " + c.altPhone : ""),
-      "Primary language: " + val(c.language),
-      "Education: " + val(c.education),
-      "Vocational goal: " + val(c.goal),
-      "Visual diagnosis: " + val(c.diagnosis),
-      "Acuity: OD (right) " + val(c.acuityOD) + ", OS (left) " + val(c.acuityOS) + ", visual fields " + val(c.visualFields),
-      "Secondary disability: " + val(c.secondaryDisability),
-      "Health issues / safety concerns: " + val(c.healthIssues),
-      "Current hardware: " + val(c.currentHardware),
-      "Current software: " + val(c.currentSoftware),
-      c.notes ? "Notes: " + c.notes : null,
-      "Best days to contact: " + val(c.bestDaysToContact),
-      (rec.derived.easGapFilled && rec.derived.easGapFilled.length)
-        ? "Sourced from the EAS where the packet has no 1884 value: " + rec.derived.easGapFilled.join(", ") + "."
-        : null
+      line("Date of birth: ", piece(c.dob, sc.dob)),
+      line("Address: ", addrText ? piece(addrText, sc.address) : missSpan()),
+      line("Phone: ", piece(c.phone, sc.phone), c.altPhone ? txt("  Alternate: " + c.altPhone) : null),
+      line("Primary language: ", piece(c.language, sc.language)),
+      line("Education: ", piece(c.education, sc.education)),
+      line("Vocational goal: ", piece(c.goal, sc.goal)),
+      line("Visual diagnosis: ", piece(c.diagnosis, sc.diagnosis)),
+      line("Acuity: OD (right) ", piece(c.acuityOD, sc.acuityOD), ", OS (left) ", piece(c.acuityOS, sc.acuityOS), ", visual fields ", piece(c.visualFields, sc.visualFields)),
+      line("Secondary disability: ", piece(c.secondaryDisability, sc.secondaryDisability)),
+      line("Health issues / safety concerns: ", piece(c.healthIssues, sc.healthIssues)),
+      line("Current hardware: ", piece(c.currentHardware, sc.currentHardware)),
+      line("Current software: ", piece(c.currentSoftware, sc.currentSoftware)),
+      c.notes ? line("Notes: ", txt(c.notes)) : null,
+      line("Best days to contact: ", piece(c.bestDaysToContact, sc.bestDaysToContact))
     ];
     frag.appendChild(section("What we have — customer", have));
 
     var office = rec.officeFromSA || {};
+    var officeText = [office.name, office.street, office.cityLine].filter(Boolean).join(", ");
+    var sco = (rec.sources && rec.sources.counselor) || {};
+    var caseIds = (rec.derived && rec.derived.caseIdSources) || [];
+    var caseIdVal = au.caseId || (rec.eas && rec.eas.caseId) || null;
     var counselorItems = [
-      "Counselor: " + val(co.name) + ", caseload " + val(co.caseload) + ", phone " + val(co.phone) + " (phone from the 1884)",
-      "Service Authorization number: " + val(au.number),
-      "Case ID: " + val(au.caseId),
-      "SA dates: issued " + val(au.dateIssued) + ", runs " + val(au.startDate) + " to " + val(au.endDate) + ", total $" + val(au.totalCost),
-      "Counselor office (from SA): " + [office.name, office.street, office.cityLine].filter(Boolean).join(", "),
+      line("Counselor: ", piece(co.name, sco.name), ", caseload ", piece(co.caseload, sco.caseload), ", phone ", piece(co.phone, sco.phone)),
+      line("Service Authorization number: ", piece(au.number, "SA")),
+      line("Case ID: ", caseIdVal ? txt(caseIdVal + (caseIds.length > 1 ? " (from the " + caseIds[0] + "; also on the " + caseIds[1] + ")" : caseIds.length ? " (from the " + caseIds[0] + ")" : "")) : missSpan()),
+      line("SA dates: issued ", piece(au.dateIssued, "SA"), ", runs ", piece(au.startDate, "SA"), " to ", piece(au.endDate, "SA"), ", total $", piece(au.totalCost, "SA")),
+      line("Counselor office (from the SA): ", officeText ? txt(officeText) : missSpan()),
       rec.twcContact ? "TWC contact listed on the SA (this is NOT the counselor): " + val(rec.twcContact.name) + ", " + val(rec.twcContact.phone) : null
     ];
     frag.appendChild(section("What we have — counselor and authorization", counselorItems));
 
     var trainingItems = [
-      "Service requested: " + val(rec.referral.serviceRequested) + ", referral date " + val(rec.referral.date),
-      "Delivery method: " + val(tr.deliveryMethod),
-      "Training location: " + (tr.locations.length ? tr.locations.join("; ") : "none marked on the 1884"),
+      line("Service requested: ", piece(rec.referral.serviceRequested, "VR1884"), ", referral date ", piece(rec.referral.date, "VR1884")),
+      line("Delivery method: ", piece(tr.deliveryMethod, "VR1884")),
+      tr.locations.length ? line("Training location: ", txt(tr.locations.join("; ") + " (from the VR1884)")) : "Training location: none marked on the 1884",
       tr.deliveryComments ? "Delivery comments: " + tr.deliveryComments : null
     ];
     (rec.lineItems || []).forEach(function (i) {
       trainingItems.push("Authorized on SA: " + i.description + " — " + i.qty + " " + i.unit + " at $" + i.unitCost + " = $" + i.totalCost);
     });
     tr.topics.forEach(function (t) {
-      trainingItems.push("Topic: " + t.label + (t.description ? " — " + t.description : ""));
+      trainingItems.push("Topic: " + t.label + (t.description ? " — " + t.description : "") + " (from the VR1884)");
     });
     trainingItems.push("Assessment subjects for the VR2902s: " + (rec.derived.subjects2902.length ? rec.derived.subjects2902.join(", ") : "none derived"));
     rec.derived.subjectNotes.forEach(function (n) { trainingItems.push("Note: " + n); });
