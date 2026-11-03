@@ -128,10 +128,11 @@
       (packetName && sc.name ? " (from the " + sc.name + ")" : "")));
 
     var missingDocs = (rec.derived && rec.derived.missingDocuments) || [];
-    if (missingDocs.length) {
-      var mSec = section("Missing from this packet", missingDocs.map(function (d) {
-        return "⚠ Missing: " + d;
-      }));
+    var missingList = missingDocs.map(function (d) { return "⚠ Missing: " + d; });
+    if (rec.derived && rec.derived.baselineGap)
+      missingList.push("⚠ Baseline VR2902: this SA funds a post-training assessment but no baseline. Ask the counselor: was a baseline VR2902 already completed (possibly under an earlier SA)? If so, request a copy — the post-training assessment should re-test the same subjects and tasks. If not, ask whether a baseline should be authorized before training begins.");
+    if (missingList.length) {
+      var mSec = section("Missing from this packet", missingList);
       mSec.querySelectorAll("li").forEach(function (li) { li.className = "missing-line"; });
       frag.appendChild(mSec);
     }

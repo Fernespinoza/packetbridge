@@ -375,6 +375,11 @@
       subjects2902: subj.subjects,
       subjectNotes: subj.notes,
       documentsToGenerate: docs,
+      /* SA funds a post-training assessment but no baseline: flag it for
+         the counselor (baseline may exist under an earlier SA — request
+         the copy; if none exists, ask about authorizing one BEFORE the
+         training runs). Fernando's call, 2026-11-02. */
+      baselineGap: docs.indexOf("VR2902 Post-Training") !== -1 && docs.indexOf("VR2902 Baseline") === -1,
       conflicts: conflicts,
       missingDocuments: missingDocuments,
       easGapFilled: gapFilled,
