@@ -84,6 +84,31 @@
     return out;
   }
 
+  /* Has this subject been scored at all in the given ratings? (Any one
+     rated task counts; for Keyboard Knowledge a typing speed counts
+     too.) Drives the per-subject post-training lock (Fernando,
+     2026-11-04: show the post topics, lock their scoring until the
+     baseline topics are scored). */
+  function subjectScored(ratingsObj, sections, subject, wpmFields) {
+    if (!ratingsObj) return false;
+    var sec = sectionForSubject(sections, subject);
+    if (sec) {
+      for (var gi = 0; gi < sec.groups.length; gi++) {
+        var tasks = sec.groups[gi].tasks;
+        for (var ti = 0; ti < tasks.length; ti++) {
+          var v = ratingsObj[tasks[ti].field];
+          if (v === "0" || v === "1" || v === "2") return true;
+        }
+      }
+    }
+    if (subject === "Keyboard Knowledge" && wpmFields) {
+      for (var wi = 0; wi < wpmFields.length; wi++) {
+        if (ratingsObj[wpmFields[wi]]) return true;
+      }
+    }
+    return false;
+  }
+
   function sectionForSubject(sections, subject) {
     var found = null;
     (sections || []).forEach(function (s) { if (s.subject === subject) found = s; });
@@ -248,7 +273,8 @@
     blankDetails: blankDetails, validateDetails: validateDetails,
     subjectsPrefillNote: subjectsPrefillNote,
     serializeDraft: serializeDraft, parseDraft: parseDraft,
-    scoreForGroup: scoreForGroup, computeScores: computeScores, sectionForSubject: sectionForSubject
+    scoreForGroup: scoreForGroup, computeScores: computeScores, sectionForSubject: sectionForSubject,
+    subjectScored: subjectScored
   };
   if (typeof module !== "undefined" && module.exports) module.exports = logic;
   global.PacketBridgeDetails = logic;
@@ -408,7 +434,7 @@
     });
   }
 
-  function ratingRow(phase, subject, group, groupIdx, task) {
+  function ratingRow(phase, subject, group, groupIdx, task, locked) {
     var row = document.createElement("div");
     row.className = "rating-task";
     var sel = document.createElement("select");
@@ -420,6 +446,7 @@
       sel.appendChild(o);
     });
     sel.value = ratingsState[phase][task.field] || "";
+    if (locked) sel.disabled = true;
     var lab = document.createElement("label");
     lab.htmlFor = sel.id;
     lab.textContent = task.n + ". " + task.text;
@@ -440,7 +467,7 @@
     return row;
   }
 
-  function renderPhase(phase, host) {
+  function renderPhase(phase, host, lockFor) {
     var data = tasksData();
     host.innerHTML = "";
     if (!data) {
@@ -469,6 +496,12 @@
       var legend = document.createElement("legend");
       legend.textContent = subj;
       fs.appendChild(legend);
+      var subjLocked = (phase === "post" && lockFor) ? !!lockFor(subj) : false;
+      if (subjLocked) {
+        var lockNote = document.createElement("p");
+        lockNote.textContent = "Scoring locked for " + subj + " — the topics are shown so you can see what the post-training assessment covers. Score this subject in the baseline assessment above and its scoring unlocks here.";
+        fs.appendChild(lockNote);
+      }
       sec.groups.forEach(function (g, gi) {
         var glab = document.createElement("p");
         glab.className = "group-label";
@@ -485,12 +518,13 @@
           glab.appendChild(bs);
         }
         fs.appendChild(glab);
-        g.tasks.forEach(function (t) { fs.appendChild(ratingRow(phase, subj, g, gi, t)); });
+        g.tasks.forEach(function (t) { fs.appendChild(ratingRow(phase, subj, g, gi, t, subjLocked)); });
       });
       if (subj === "Keyboard Knowledge") {
         data.wpmFields.forEach(function (wf) {
           var inp = textInput("", "number");
           inp.min = "0"; inp.value = ratingsState[phase][wf] || "";
+          if (subjLocked) inp.disabled = true;
           inp.setAttribute("aria-label", wf);
           inp.addEventListener("change", function () {
             if (inp.value) ratingsState[phase][wf] = inp.value; else delete ratingsState[phase][wf];
@@ -510,23 +544,28 @@
     });
   }
 
-  /* The gated flow (Fernando, 2026-11-03 — point 2): no Prep/Complete
-     toggle. The baseline grids are always available once subjects are
-     picked; the post-training grids stay locked until the baseline has
-     its first rating (or a loaded draft already has post ratings) —
-     that is the order the service actually runs. */
-  function anyRatings(phase) { return Object.keys(ratingsState[phase] || {}).length > 0; }
-  function postUnlocked() { return anyRatings("baseline") || anyRatings("post"); }
+  /* The gated flow (Fernando, 2026-11-03 — point 2; refined 2026-11-04):
+     no Prep/Complete toggle. The baseline grids are always available
+     once subjects are picked; the post-training grids are always shown
+     too, with per-subject scoring locks (see postSubjectLocked below). */
+  /* Per-subject post lock: a subject's post scoring unlocks once that
+     subject is scored in the baseline, or if a loaded draft already
+     has post ratings for it (existing work is never locked away). */
+  function postSubjectLocked(subj) {
+    var data = tasksData();
+    if (!data) return false;
+    if (subjectScored(ratingsState.baseline, data.sections, subj, data.wpmFields)) return false;
+    if (subjectScored(ratingsState.post, data.sections, subj, data.wpmFields)) return false;
+    return true;
+  }
   function renderPostGate() {
     var pw = $("ratings-post-wrap"), lock = $("ratings-post-lock"), host = $("ratings-post");
     if (!pw || !host) return;
     pw.hidden = false;
-    if (postUnlocked()) {
-      if (lock) lock.hidden = true;
-      renderPhase("post", host);
-    } else {
-      if (lock) lock.hidden = false;
-      host.innerHTML = "";
+    renderPhase("post", host, postSubjectLocked);
+    if (lock) {
+      var anyLocked = collectSubjectsOnly().some(postSubjectLocked);
+      lock.hidden = !anyLocked;
     }
     refreshScoreSpans();
   }
