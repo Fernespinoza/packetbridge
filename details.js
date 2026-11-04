@@ -90,6 +90,31 @@
     return found;
   }
 
+  /* Plain-language note shown above the subjects checkboxes, so the
+     pre-checked list never looks like something the trainer typed or a
+     default everyone gets (Fernando, 2026-11-04: he loaded a packet,
+     saw the baseline subjects already filled, and could not tell the
+     program had pulled them). Says WHERE the checks came from and that
+     the same list drives both VR2902s. */
+  function subjectsPrefillNote(record) {
+    var from1884 = (record && record.derived && record.derived.subjects2902) || [];
+    if (from1884.length) {
+      return "Auto-filled from the VR1884 — you did not type these. When you loaded the packet, " +
+        "PacketBridge read the referral's training topics and checked the matching VR2902 subjects " +
+        "(for example, a Fusion topic checks Screen Reader and Screen Magnification). " +
+        "This same list is used for both the baseline and the post-training VR2902. " +
+        "Review it before you generate: uncheck anything that should not be assessed, and check anything that is missing.";
+    }
+    var sugg = (record && record.derived && record.derived.suggestedSubjects) || [];
+    if (sugg.length) {
+      return "Auto-filled from the EAS — you did not type these. No VR1884 training topics were found, " +
+        "so the checked subjects are suggestions drawn from the EAS recommendations. " +
+        "This same list is used for both the baseline and the post-training VR2902. " +
+        "Review it carefully before you generate: uncheck anything that should not be assessed, and check anything that is missing.";
+    }
+    return "Nothing was auto-filled. Check the subjects to assess — the same list is used for both the baseline and the post-training VR2902.";
+  }
+
   function validateDetails(d, sections, record) {
     var warnings = [];
     if (!d) return ["No details yet."];
@@ -221,6 +246,7 @@
     SUBJECTS_ALL: SUBJECTS_ALL, MAX_SESSIONS: MAX_SESSIONS, PROFILE_KEY: PROFILE_KEY,
     todayISO: todayISO, blankProfile: blankProfile, blankSession: blankSession,
     blankDetails: blankDetails, validateDetails: validateDetails,
+    subjectsPrefillNote: subjectsPrefillNote,
     serializeDraft: serializeDraft, parseDraft: parseDraft,
     scoreForGroup: scoreForGroup, computeScores: computeScores, sectionForSubject: sectionForSubject
   };
@@ -561,6 +587,8 @@
       var cb = $("subj-" + s.replace(/\s+/g, "-"));
       if (cb) cb.checked = d.subjects.indexOf(s) >= 0;
     });
+    var subjNote = $("subjects-note");
+    if (subjNote) subjNote.textContent = subjectsPrefillNote(currentRecord);
     if ($("pq-baseline")) $("pq-baseline").checked = !!(d.prereqs && d.prereqs.baselineCopyReceived);
     /* The baseline-copy question only exists when the packet has a
        baseline gap — show the confirmation row only then. */
