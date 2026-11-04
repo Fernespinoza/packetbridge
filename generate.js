@@ -8,8 +8,8 @@
    ("October 27, 2026"), hours as "1 hour"/"2 hours", unused service rows
    "N/A" once sessions exist, unassessed VR2902 subjects "N/A" in every
    task + score field, a phase with no ratings left blank. A packet with
-   NO sessions at all is a prep packet: its VR2868 session table stays
-   blank with one prep note instead of 14 rows of N/A. */
+   NO sessions at all is a prep packet: its VR2868 session table and its
+   report date stay blank — nothing written there at all. */
 (function (global) {
   "use strict";
 
@@ -171,7 +171,13 @@
     text("Provider Full Fax Number", profile.fax);
     text("Provider Email Address", profile.email);
     text("Provider Trainer", profile.trainer);
-    if (details.reportDate) text("Provider Report Date", longDate(details.reportDate));
+    /* Prep treatment (Fernando, 2026-11-04, after seeing v0.21.0's output
+       on his Section 4 report): when no sessions exist the packet is a
+       prep — the report date stays blank too, even though the form
+       defaults it to today. A report date belongs to a report of services
+       actually rendered. */
+    var sessions = details.sessions.filter(function (s) { return s.date || s.hours || s.description; });
+    if (details.reportDate && sessions.length) text("Provider Report Date", longDate(details.reportDate));
 
     var objectives = record.training.topics.map(function (t) {
       return t.description ? (t.label + " — " + t.description) : t.label;
@@ -186,18 +192,15 @@
     if (record.training.deliveryMethod)
       fields["Services were facilitated"] = { t: "radio", v: normalizeDelivery(record.training.deliveryMethod) };
 
-    var sessions = details.sessions.filter(function (s) { return s.date || s.hours || s.description; });
-    /* Prep packets (Fernando, 2026-11-04): with no sessions entered, this
-       report is being prepared in advance of services — stamping N/A in
-       all 14 rows reads like a finished report that says nothing. Leave
-       the table blank and say so once, in the first row: the fields are
-       to be completed later, in PacketBridge or in a PDF editor. When
-       sessions DO exist the report is a real service record and the
-       unused rows keep the shells' N/A convention. */
-    if (!sessions.length) {
-      warnings.push("No sessions entered — prep packet: the VR2868 session table was left blank, with a prep note in the first row instead of N/A rows.");
-      text("Service 1 Description", "Prep packet: this report was prepared in advance of services, so many fields in this report packet are not filled in yet. Fill them in on PacketBridge, or fill them in on your own using a PDF editor.");
-    }
+    /* Prep packets: with no sessions entered, the session table stays
+       COMPLETELY blank — no N/A rows (v0.21.0) and no explanatory note in
+       the first description row either (Fernando, 2026-11-04, after
+       seeing the note on his Section 4 form: a service-description field
+       is not the place for it — blank reads as "not yet," which is the
+       truth of a prep). When sessions DO exist the report is a real
+       service record and the unused rows keep the shells' N/A. */
+    if (!sessions.length)
+      warnings.push("No sessions entered — prep packet: the VR2868 session table and the report date were left blank.");
     for (var i = 0; i < 14; i++) {
       var n = i + 1;
       if (i < sessions.length) {
