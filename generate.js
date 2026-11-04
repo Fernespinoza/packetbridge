@@ -232,7 +232,7 @@
     var mid = build2868(record, profile, details);
     var post = build2902(record, profile, details, tasksData, "post");
     var safe = (record.customer.name || "Customer").replace(/[\\/:*?"<>|]/g, "");
-    return {
+    var packet = {
       docs: [
         { id: "vr2902-baseline", title: "VR2902 Baseline Assessment", template: "vr2902",
           filename: "VR2902 Baseline Assessment - " + safe + ".pdf", fields: base.fields },
@@ -243,6 +243,20 @@
       ],
       warnings: base.warnings.concat(mid.warnings, post.warnings)
     };
+    /* External baseline (Fernando, 2026-11-04): when a completed baseline
+       VR2902 was provided with this packet, it is NOT regenerated — it is
+       the previous assessor's completed work, and re-issuing it under
+       this trainer's name would misattribute it. The generated packet
+       is the VR2868 + the post-training VR2902; the provided baseline
+       copy goes into the packet as-is. */
+    if (details.externalBaseline) {
+      packet.docs = packet.docs.filter(function (d) { return d.id !== "vr2902-baseline"; });
+      packet.warnings = packet.warnings.filter(function (w) { return w.indexOf("baseline assessment date") === -1; });
+      packet.warnings.push("Baseline VR2902: not generated — a completed baseline assessment was provided with this packet" +
+        ((details.externalBaseline.subjects || []).length ? " (subjects: " + details.externalBaseline.subjects.join(", ") + ")" : "") +
+        ". Include that copy in the packet; the post-training assessment re-tests the same subjects.");
+    }
+    return packet;
   }
 
   /* Template fingerprints: if TWC revises a form, field count + sentinels
@@ -373,6 +387,8 @@
     if (!window.PBDetails) { setStatus("The report form is not loaded."); return; }
     var profile = window.PBDetails.collectProfile();
     var details = window.PBDetails.collect();
+    if (window.PBExternalBaseline)
+      details.externalBaseline = { dateISO: window.PBExternalBaseline.dateISO || null, subjects: window.PBExternalBaseline.subjects || [] };
     var tasksData = window.PacketBridgeTasks;
     setStatus("Building your packet…");
     setNotes([]);
@@ -397,7 +413,10 @@
       }
       if (!profile.providerName || !profile.trainer)
         notes.push("Your provider profile looks incomplete — the Provider/Trainer lines on the forms use it. Fill it in (section 3) and regenerate if anything is missing.");
-      setStatus("Done — all three PDFs downloaded, in packet order: VR2902 Baseline, VR2868, VR2902 Post-Training. Nothing was uploaded; the files are on this computer only.");
+      if (details.externalBaseline)
+        setStatus("Done — two PDFs downloaded: VR2868 and VR2902 Post-Training. The baseline VR2902 was not generated — include the completed baseline copy that was provided with this packet. Nothing was uploaded; the files are on this computer only.");
+      else
+        setStatus("Done — all three PDFs downloaded, in packet order: VR2902 Baseline, VR2868, VR2902 Post-Training. Nothing was uploaded; the files are on this computer only.");
       setNotes(notes);
       window.PBState = { record: record, profile: profile, details: details, lastPacket: packet };
     } catch (e) {

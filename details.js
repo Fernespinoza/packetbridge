@@ -644,6 +644,26 @@
   }
   function setDetailsStatus(msg) { $("details-status").textContent = msg; }
 
+  /* Load a completed baseline VR2902 provided with the packet (Fernando,
+     2026-11-04): its subjects get ticked, its ratings become the form's
+     baseline ratings (which unlocks the matching post-training subjects),
+     and its date becomes the baseline assessment date. Called by app.js
+     after PacketBridgeExtract.parseFilled2902 validates the upload. */
+  function applyBaseline(parsed) {
+    (parsed.subjects || []).forEach(function (subj) {
+      var cb = $("subj-" + subj.replace(/\s+/g, "-"));
+      if (cb) cb.checked = true;
+    });
+    Object.keys(parsed.ratings || {}).forEach(function (k) {
+      ratingsState.baseline[k] = parsed.ratings[k];
+    });
+    if (parsed.dateISO) $("dt-assessmentDate").value = parsed.dateISO;
+    renderRatings();
+    setDetailsStatus("Baseline loaded from the completed VR2902 you provided: " +
+      (parsed.subjects || []).join(", ") + " — " + (parsed.ratedCount || 0) +
+      " task ratings. The matching post-training subjects are unlocked.");
+  }
+
   function buildSubjects() {
     var host = $("subjects-list");
     if (host.childNodes.length) return;
@@ -719,6 +739,6 @@
     window.PBState = { record: record, profile: collectProfile(), details: collectDetails() };
   }
 
-  global.PBDetails = { init: init, onRecord: onRecord, collect: collectDetails, collectProfile: collectProfile };
+  global.PBDetails = { init: init, onRecord: onRecord, collect: collectDetails, collectProfile: collectProfile, applyBaseline: applyBaseline };
   document.addEventListener("DOMContentLoaded", init);
 })(typeof window !== "undefined" ? window : globalThis);

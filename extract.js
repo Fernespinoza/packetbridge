@@ -811,7 +811,8 @@
     if (d.referralBlank)
       groups.counselor.push("Please send the completed VR1884 Referral — the copy in this packet is blank.");
     var prereqs = opts.prereqs || {};
-    if (d.baselineGap && !prereqs.baselineCopyReceived)
+    if (d.baselineGap && !prereqs.baselineCopyReceived &&
+        !(opts.externalBaseline && (opts.externalBaseline.subjects || []).length))
       groups.counselor.push("Was a baseline VR2902 already completed (possibly under an earlier SA)? If so, please send a copy — the post-training assessment should re-test the same subjects and tasks. If not, should a baseline be authorized before training begins?");
     (d.saMathProblems || []).forEach(function (prob) {
       groups.issuer.push("Please check the SA math — " + prob + " A corrected SA may be needed.");
@@ -922,6 +923,8 @@
       items.push(item("Baseline settled", "check", "No SA loaded — whether a baseline is funded is unknown."));
     else if (!d.baselineGap)
       items.push(item("Baseline settled", "pass", "The SA funds a baseline assessment (or no post-training assessment is funded)."));
+    else if (opts && opts.externalBaseline && (opts.externalBaseline.subjects || []).length)
+      items.push(item("Baseline settled", "pass", "A completed baseline VR2902 was provided with this packet" + (opts.externalBaseline.dateISO ? " (dated " + longDateISO(opts.externalBaseline.dateISO) + ")" : "") + " — its subjects and ratings are loaded, and the post-training assessment re-tests the same subjects: " + opts.externalBaseline.subjects.join(", ") + "."));
     else if (prereqs.baselineCopyReceived)
       items.push(item("Baseline settled", "pass", "The SA funds post-training only, and the earlier baseline copy has been received."));
     else
@@ -1037,7 +1040,75 @@
     return m ? m[1] : null;
   }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness, DISMISSIBLE_FLAGS: ["stale-eas", "stale-referral"], FORM_REVISIONS: FORM_REVISIONS, referralRevision: referralRevision, templateRevision: templateRevision };
+  var MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  function longDateISO(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+    if (!m) return iso;
+    return MONTHS_LONG[+m[2] - 1] + " " + (+m[3]) + ", " + m[1];
+  }
+  /* Parse a date written either M/D/YYYY or "Month D, YYYY" into ISO. */
+  function parseDateText(v) {
+    var t = String(v || "").trim();
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+    if (m) return m[3] + "-" + ("0" + (+m[1])).slice(-2) + "-" + ("0" + (+m[2])).slice(-2);
+    m = /^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/.exec(t);
+    if (m) {
+      var idx = MONTHS_LONG.map(function (x) { return x.toLowerCase(); }).indexOf(m[1].toLowerCase());
+      if (idx >= 0) return m[3] + "-" + ("0" + (idx + 1)).slice(-2) + "-" + ("0" + (+m[2])).slice(-2);
+    }
+    return null;
+  }
+
+  /* Read a COMPLETED baseline VR2902's fields (Fernando, 2026-11-04):
+     the rare hand-off case — a previous trainer did the baseline, this
+     SA funds training + post only. The trainer uploads the completed
+     baseline; PacketBridge pulls its subjects, task ratings, typing
+     speed and date out of the form fields so the post-training
+     assessment can re-test the same work. A blank/prep copy, a
+     post-training form, or a printed scan (no readable fields) is
+     refused with the reason. fields: {name: value} as read by the
+     app's PDF field reader (checkboxes "/Yes"; radio selected text). */
+  function parseFilled2902(fields, tasksData) {
+    var out = { ok: false, errors: [], assessmentType: null, customerName: null,
+                subjects: [], ratings: {}, dateISO: null, ratedCount: 0 };
+    if (!fields || typeof fields !== "object" || !tasksData || !tasksData.sections) {
+      out.errors.push("No assessment data could be read from that PDF.");
+      return out;
+    }
+    out.assessmentType = fields["Assessment Type"] || null;
+    if (out.assessmentType && out.assessmentType !== "Baseline Assessment")
+      out.errors.push("That is a " + out.assessmentType + " form — closing the baseline gap needs the completed BASELINE VR2902.");
+    var looks = tasksData.sections.some(function (sec) {
+      if (fields["Assessment will measure subject " + sec.subject] !== undefined) return true;
+      return sec.groups.some(function (g) { return g.tasks.some(function (t) { return fields[t.field] !== undefined; }); });
+    });
+    if (!looks)
+      out.errors.push("That PDF does not look like a filled VR2902 — no assessment fields were readable. A printed or scanned copy cannot be read; use the filled, fillable copy.");
+    out.customerName = fields["Customer name"] || fields["Customer's name"] || null;
+    tasksData.sections.forEach(function (sec) {
+      if (fields["Assessment will measure subject " + sec.subject] !== "/Yes") return;
+      out.subjects.push(sec.subject);
+      sec.groups.forEach(function (g) {
+        g.tasks.forEach(function (t) {
+          var v = fields[t.field];
+          if (v === "0" || v === "1" || v === "2") { out.ratings[t.field] = v; out.ratedCount++; }
+        });
+      });
+    });
+    ["Keyboard Speed Gross WPM", "Keyboard Speed Net WPM"].forEach(function (f) {
+      var v = fields[f];
+      if (v && /^\d+$/.test(String(v).trim())) out.ratings[f] = String(v).trim();
+    });
+    out.dateISO = fields["Date"] ? parseDateText(fields["Date"]) : null;
+    if (!out.subjects.length && looks && !out.errors.length)
+      out.errors.push("No assessed subjects are checked on that form.");
+    if (looks && !out.ratedCount && !out.ratings["Keyboard Speed Gross WPM"] && !out.ratings["Keyboard Speed Net WPM"])
+      out.errors.push("That baseline has no task ratings or typing speed filled in — it looks like a blank prep copy, not the completed assessment.");
+    out.ok = out.errors.length === 0;
+    return out;
+  }
+
+  var api = { parse1884: parse1884, parseFilled2902: parseFilled2902, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness, DISMISSIBLE_FLAGS: ["stale-eas", "stale-referral"], FORM_REVISIONS: FORM_REVISIONS, referralRevision: referralRevision, templateRevision: templateRevision };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);

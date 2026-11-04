@@ -149,10 +149,41 @@
      documents, SA math, conflicts, and expired SAs cannot. Reset when a
      fresh packet is read; kept across details-form edits. */
   var dismissedFlags = [];
+  /* A completed baseline VR2902 provided with the packet (Fernando,
+     2026-11-04): parsed by PacketBridgeExtract.parseFilled2902 from an
+     upload in the readout; closes the baseline gap with evidence. Also
+     mirrored on window.PBExternalBaseline for the generate step. */
+  var externalBaseline = null;
+
+  function normName(n) {
+    return String(n || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  }
+  function wireBaselineUpload(input, status) {
+    input.addEventListener("change", async function () {
+      if (!input.files || !input.files[0]) return;
+      status.textContent = " Reading\u2026";
+      try {
+        var fields = await readPdfFields(input.files[0]);
+        var parsed = window.PacketBridgeExtract.parseFilled2902(fields, window.PACKETBRIDGE_TASKS);
+        if (!parsed.ok) { status.textContent = " \u26a0 " + parsed.errors.join(" "); return; }
+        var want = lastRecord && lastRecord.customer ? lastRecord.customer.name : "";
+        if (parsed.customerName && want && normName(parsed.customerName) !== normName(want)) {
+          status.textContent = " \u26a0 That baseline names " + parsed.customerName + ", but this packet is for " + want + " \u2014 it was not applied.";
+          return;
+        }
+        externalBaseline = parsed;
+        window.PBExternalBaseline = parsed;
+        if (window.PBDetails && window.PBDetails.applyBaseline) window.PBDetails.applyBaseline(parsed);
+        renderReadout(lastRecord);
+      } catch (e) {
+        status.textContent = " \u26a0 Could not read that PDF: " + (e && e.message ? e.message : e);
+      }
+    });
+  }
   function fillReadiness(host, rec, prereqs) {
     host.textContent = "";
     if (!window.PacketBridgeExtract.readiness) return;
-    var r = window.PacketBridgeExtract.readiness(rec, prereqs, { dismissed: dismissedFlags });
+    var r = window.PacketBridgeExtract.readiness(rec, prereqs, { dismissed: dismissedFlags, externalBaseline: externalBaseline });
     var sum = el("summary");
     sum.appendChild(el("h2", "Ready to schedule?"));
     host.appendChild(sum);
@@ -178,7 +209,7 @@
   };
 
   function renderReadout(rec, fresh) {
-    if (fresh) dismissedFlags = [];
+    if (fresh) { dismissedFlags = []; externalBaseline = null; window.PBExternalBaseline = null; }
     readoutEl.textContent = "";
     var frag = document.createDocumentFragment();
     var c = rec.customer, co = rec.counselor, au = rec.authorization || {}, tr = rec.training;
@@ -235,8 +266,9 @@
     var missingList = missingDocs.map(function (d) { return "⚠ Missing: " + d; });
     if (rec.derived && rec.derived.referralBlank)
       missingList.push("⚠ VR1884 Referral: the copy loaded appears to be unfilled — no customer, counselor, training topics, or delivery method on it.");
-    if (rec.derived && rec.derived.baselineGap)
-      missingList.push("⚠ Baseline VR2902: this SA funds a post-training assessment but no baseline. Ask the counselor: was a baseline VR2902 already completed (possibly under an earlier SA)? If so, request a copy — the post-training assessment should re-test the same subjects and tasks. If not, ask whether a baseline should be authorized before training begins.");
+    var baselineGapActive = !!(rec.derived && rec.derived.baselineGap && !externalBaseline);
+    if (baselineGapActive)
+      missingList.push("⚠ Baseline VR2902: this SA funds a post-training assessment but no baseline. Ask the counselor: was a baseline VR2902 already completed (possibly under an earlier SA)? If so, request a copy — the post-training assessment should re-test the same subjects and tasks. If not, ask whether a baseline should be authorized before training begins. If a previous trainer already completed the baseline, provide that completed VR2902 below instead — its subjects and ratings will be loaded.");
     var dismissibleKinds = (window.PacketBridgeExtract && window.PacketBridgeExtract.DISMISSIBLE_FLAGS) || [];
     var dismissibleActive = [];
     (rec.derived && rec.derived.dateFlags || []).forEach(function (f) {
@@ -266,12 +298,26 @@
         li.appendChild(btn);
         mUl.appendChild(li);
       });
+      if (baselineGapActive) {
+        var bli = el("li");
+        bli.className = "missing-line";
+        bli.appendChild(document.createTextNode("Already have the completed baseline? Provide it here (the filled PDF copy): "));
+        var binp = document.createElement("input");
+        binp.type = "file";
+        binp.accept = "application/pdf";
+        binp.setAttribute("aria-label", "Upload the completed baseline VR2902 PDF");
+        var bstat = el("span");
+        bli.appendChild(binp);
+        bli.appendChild(bstat);
+        wireBaselineUpload(binp, bstat);
+        mUl.appendChild(bli);
+      }
       frag.appendChild(mSec);
     }
     var dismissedPresent = ((rec.derived && rec.derived.dateFlags) || []).filter(function (f) {
       return dismissedFlags.indexOf(f.kind) !== -1;
     });
-    if (dismissedPresent.length) {
+    if (dismissedPresent.length || (externalBaseline && rec.derived && rec.derived.baselineGap)) {
       var dSec = section("Confirmed — warnings dismissed", []);
       var dUl = dSec.querySelector("ul");
       dismissedPresent.forEach(function (f) {
@@ -288,6 +334,21 @@
         li.appendChild(ubtn);
         dUl.appendChild(li);
       });
+      if (externalBaseline && rec.derived && rec.derived.baselineGap) {
+        var bli2 = el("li", "\u2713 Baseline gap resolved: a completed baseline VR2902 was provided" +
+          (externalBaseline.dateISO ? " (dated " + externalBaseline.dateISO + ")" : "") +
+          " \u2014 subjects: " + (externalBaseline.subjects || []).join(", ") + "; " +
+          (externalBaseline.ratedCount || 0) + " task ratings loaded into the form below, and the matching post-training subjects are unlocked. Replace it: ");
+        var binp2 = document.createElement("input");
+        binp2.type = "file";
+        binp2.accept = "application/pdf";
+        binp2.setAttribute("aria-label", "Replace the provided baseline VR2902 PDF");
+        var bstat2 = el("span");
+        bli2.appendChild(binp2);
+        bli2.appendChild(bstat2);
+        wireBaselineUpload(binp2, bstat2);
+        dUl.appendChild(bli2);
+      }
       frag.appendChild(dSec);
     }
     /* Questions routed to the person who can actually answer them:
@@ -295,7 +356,7 @@
        and contact facts are asked of the customer directly (Fernando's
        routing, 2026-11-02). */
     var qGroups = window.PacketBridgeExtract.counselorQuestions
-      ? window.PacketBridgeExtract.counselorQuestions(rec, { dismissed: dismissedFlags }) : { counselor: [], issuer: [], customer: [] };
+      ? window.PacketBridgeExtract.counselorQuestions(rec, { dismissed: dismissedFlags, externalBaseline: externalBaseline }) : { counselor: [], issuer: [], customer: [] };
     var issuerQs = (qGroups.issuer || []).slice();
     if (trainerQuestion) issuerQs.push(trainerQuestion);
     if (qGroups.counselor.length) frag.appendChild(section("Questions for the counselor", qGroups.counselor));
