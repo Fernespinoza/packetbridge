@@ -6,8 +6,10 @@
 
    Conventions mirror Fernando's own course shells: long dates
    ("October 27, 2026"), hours as "1 hour"/"2 hours", unused service rows
-   "N/A", unassessed VR2902 subjects "N/A" in every task + score field,
-   assessed subjects in Prep mode left blank. */
+   "N/A" once sessions exist, unassessed VR2902 subjects "N/A" in every
+   task + score field, a phase with no ratings left blank. A packet with
+   NO sessions at all is a prep packet: its VR2868 session table stays
+   blank with one prep note instead of 14 rows of N/A. */
 (function (global) {
   "use strict";
 
@@ -185,14 +187,24 @@
       fields["Services were facilitated"] = { t: "radio", v: normalizeDelivery(record.training.deliveryMethod) };
 
     var sessions = details.sessions.filter(function (s) { return s.date || s.hours || s.description; });
-    if (!sessions.length) warnings.push("No sessions entered — all 14 service rows are N/A.");
+    /* Prep packets (Fernando, 2026-11-04): with no sessions entered, this
+       report is being prepared in advance of services — stamping N/A in
+       all 14 rows reads like a finished report that says nothing. Leave
+       the table blank and say so once, in the first row: the fields are
+       to be completed later, in PacketBridge or in a PDF editor. When
+       sessions DO exist the report is a real service record and the
+       unused rows keep the shells' N/A convention. */
+    if (!sessions.length) {
+      warnings.push("No sessions entered — prep packet: the VR2868 session table was left blank, with a prep note in the first row instead of N/A rows.");
+      text("Service 1 Description", "Prep packet: this report was prepared in advance of services, so many fields in this report packet are not filled in yet. Fill them in on PacketBridge, or fill them in on your own using a PDF editor.");
+    }
     for (var i = 0; i < 14; i++) {
       var n = i + 1;
       if (i < sessions.length) {
         text("Service " + n + " Date", longDate(sessions[i].date));
         text("Service " + n + " Total Hours", hoursText(sessions[i].hours));
         text("Service " + n + " Description", sessions[i].description);
-      } else {
+      } else if (sessions.length) {
         text("Service " + n + " Date", "N/A");
         text("Service " + n + " Total Hours", "N/A");
         text("Service " + n + " Description", "N/A");
