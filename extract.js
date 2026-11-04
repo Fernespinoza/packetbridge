@@ -1085,6 +1085,7 @@
     if (!looks)
       out.errors.push("That PDF does not look like a filled VR2902 — no assessment fields were readable. A printed or scanned copy cannot be read; use the filled, fillable copy.");
     out.customerName = fields["Customer name"] || fields["Customer's name"] || null;
+    out.evaluatorName = fields["Evaluator name"] || fields["Report completed by print name"] || null;
     tasksData.sections.forEach(function (sec) {
       if (fields["Assessment will measure subject " + sec.subject] !== "/Yes") return;
       out.subjects.push(sec.subject);

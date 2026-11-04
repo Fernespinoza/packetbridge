@@ -337,7 +337,8 @@
       if (externalBaseline && rec.derived && rec.derived.baselineGap) {
         var bli2 = el("li", "\u2713 Baseline gap resolved: a completed baseline VR2902 was provided" +
           (externalBaseline.dateISO ? " (dated " + externalBaseline.dateISO + ")" : "") +
-          " \u2014 subjects: " + (externalBaseline.subjects || []).join(", ") + "; " +
+          " \u2014 subjects: " + (externalBaseline.subjects || []).join(", ") +
+          (externalBaseline.evaluatorName ? "; evaluator on the form: " + externalBaseline.evaluatorName : "") + "; " +
           (externalBaseline.ratedCount || 0) + " task ratings loaded into the form below, and the matching post-training subjects are unlocked. Replace it: ");
         var binp2 = document.createElement("input");
         binp2.type = "file";

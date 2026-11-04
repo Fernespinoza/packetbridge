@@ -398,6 +398,19 @@
 
   /* ---- ratings (Phase 3b) ---- */
   var ratingsState = { baseline: {}, post: {} };
+  /* Provided-baseline lock (Fernando, 2026-11-04): when the baseline in
+     this form came from an uploaded completed VR2902, it is another
+     assessor's finished work — the baseline ratings, typing, subjects
+     and assessment date render read-only. The post side stays editable. */
+  var baselineLocked = false;
+  function applyLockUI() {
+    SUBJECTS_ALL.forEach(function (subj) {
+      var cb = $("subj-" + subj.replace(/\s+/g, "-"));
+      if (cb) cb.disabled = baselineLocked;
+    });
+    var bd = $("dt-assessmentDate");
+    if (bd) bd.disabled = baselineLocked;
+  }
   var selCounter = 0;
 
   function tasksData() { return (typeof window !== "undefined" && window.PacketBridgeTasks) || null; }
@@ -496,7 +509,8 @@
       var legend = document.createElement("legend");
       legend.textContent = subj;
       fs.appendChild(legend);
-      var subjLocked = (phase === "post" && lockFor) ? !!lockFor(subj) : false;
+      var subjLocked = phase === "baseline" ? baselineLocked
+        : (phase === "post" && lockFor) ? !!lockFor(subj) : false;
       if (subjLocked) {
         var lockNote = document.createElement("p");
         lockNote.textContent = "Scoring locked for " + subj + " — the topics are shown so you can see what the post-training assessment covers. Score this subject in the baseline assessment above and its scoring unlocks here.";
@@ -573,6 +587,13 @@
     var bw = $("ratings-baseline-wrap"), pw = $("ratings-post-wrap");
     if (!bw || !pw) return;
     bw.hidden = false;
+    if (!baselineLocked && $("baseline-lock-note")) $("baseline-lock-note").remove();
+    if (baselineLocked && !$("baseline-lock-note")) {
+      var lp = document.createElement("p");
+      lp.id = "baseline-lock-note";
+      lp.textContent = "Baseline locked \u2014 these subjects, ratings and the assessment date came from the completed baseline VR2902 provided with this packet. That assessment is its author's finished work, so PacketBridge shows it read-only and will not edit it. The post-training side stays fully editable.";
+      bw.insertBefore(lp, bw.firstChild);
+    }
     renderPhase("baseline", $("ratings-baseline"));
     renderPostGate();
   }
@@ -609,7 +630,8 @@
       prereqs: {
         baselineCopyReceived: !!($("pq-baseline") && $("pq-baseline").checked)
       },
-      ratings: ratings
+      ratings: ratings,
+      baselineLocked: baselineLocked
     };
   }
   function fillDetails(d) {
@@ -637,6 +659,8 @@
       baseline: Object.assign({}, (d.ratings && d.ratings.baseline) || {}),
       post: Object.assign({}, (d.ratings && d.ratings.post) || {})
     };
+    baselineLocked = !!d.baselineLocked;
+    applyLockUI();
     if (typeof window !== "undefined" && window.PBRefreshReadiness)
       window.PBRefreshReadiness(d.prereqs || {});
     renderSessions(d.sessions && d.sessions.length ? d.sessions : [blankSession()]);
@@ -650,6 +674,8 @@
      and its date becomes the baseline assessment date. Called by app.js
      after PacketBridgeExtract.parseFilled2902 validates the upload. */
   function applyBaseline(parsed) {
+    baselineLocked = true;
+    applyLockUI();
     (parsed.subjects || []).forEach(function (subj) {
       var cb = $("subj-" + subj.replace(/\s+/g, "-"));
       if (cb) cb.checked = true;
