@@ -817,6 +817,13 @@
       groups.issuer.push("Please check the SA math — " + prob + " A corrected SA may be needed.");
     });
     (d.dateFlags || []).forEach(function (f) {
+      /* Confirmation warnings the trainer has resolved with the counselor
+         (e.g. "the EAS is old" — counselor confirms it is still accurate)
+         stop generating questions once dismissed. Only stale-document
+         kinds are dismissible; authorization and math problems are not
+         (Fernando, 2026-11-04). */
+      if ((f.kind === "stale-eas" || f.kind === "stale-referral") &&
+          (opts.dismissed || []).indexOf(f.kind) !== -1) return;
       if (f.kind === "sa-expired")
         groups.issuer.push("This SA expired on " + record.authorization.endDate + " — will a new authorization be issued, or will this one be extended?");
       else if (f.kind === "sa-not-yet")
@@ -871,7 +878,7 @@
      (item: atEvalDone / equipmentReady / baselineCopyReceived) are NOT
      extracted — they are passed in from the details form, where the
      trainer confirms them by hand. */
-  function readiness(record, prereqs) {
+  function readiness(record, prereqs, opts) {
     prereqs = prereqs || {};
     var d = record.derived || {};
     var missing = d.missingDocuments || [];
@@ -902,9 +909,13 @@
       items.push(item("Documents agree", "check", "Only one document was loaded, so nothing could be cross-checked."));
     else
       items.push(item("Documents agree", "pass", "No conflicts among the documents loaded."));
-    var stale = (d.dateFlags || []).filter(function (f) { return f.kind.indexOf("stale") === 0; });
+    var staleAll = (d.dateFlags || []).filter(function (f) { return f.kind.indexOf("stale") === 0; });
+    var dismissedKinds = (opts && opts.dismissed) || [];
+    var stale = staleAll.filter(function (f) { return dismissedKinds.indexOf(f.kind) === -1; });
     if (stale.length)
       items.push(item("Documents current", "check", stale.map(function (f) { return f.kind === "stale-eas" ? "the EAS is over 6 months older than the SA" : "the VR1884 is over 6 months older than the SA"; }).join("; ") + " — confirm the information is still current."));
+    else if (staleAll.length)
+      items.push(item("Documents current", "pass", "An older document in this packet was confirmed still current — its currency warning was dismissed after confirmation."));
     else
       items.push(item("Documents current", "pass", "No document is more than 6 months older than the SA."));
     if (missing.indexOf("Service Authorization (SA)") !== -1)
@@ -1026,7 +1037,7 @@
     return m ? m[1] : null;
   }
 
-  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness, FORM_REVISIONS: FORM_REVISIONS, referralRevision: referralRevision, templateRevision: templateRevision };
+  var api = { parse1884: parse1884, parseSA: parseSA, parseEAS: parseEAS, subjectsFor: subjectsFor, buildRecord: buildRecord, counselorQuestions: counselorQuestions, is1884Fields: is1884Fields, classifyText: classifyText, isFlat1884Text: isFlat1884Text, parseFlat1884: parseFlat1884, readiness: readiness, DISMISSIBLE_FLAGS: ["stale-eas", "stale-referral"], FORM_REVISIONS: FORM_REVISIONS, referralRevision: referralRevision, templateRevision: templateRevision };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   global.PacketBridgeExtract = api;
 })(typeof window !== "undefined" ? window : globalThis);

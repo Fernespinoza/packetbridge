@@ -142,10 +142,17 @@
      re-rendered live when the trainer ticks a prerequisite checkbox in
      the details form (window.PBRefreshReadiness). */
   var lastRecord = null, lastPrereqs = {};
+  /* Confirmation warnings the trainer has dismissed for THIS packet
+     (Fernando, 2026-11-04): e.g. the counselor confirmed the old EAS is
+     still accurate, so its stale warning is cleared. Only the kinds in
+     PacketBridgeExtract.DISMISSIBLE_FLAGS can be dismissed — missing
+     documents, SA math, conflicts, and expired SAs cannot. Reset when a
+     fresh packet is read; kept across details-form edits. */
+  var dismissedFlags = [];
   function fillReadiness(host, rec, prereqs) {
     host.textContent = "";
     if (!window.PacketBridgeExtract.readiness) return;
-    var r = window.PacketBridgeExtract.readiness(rec, prereqs);
+    var r = window.PacketBridgeExtract.readiness(rec, prereqs, { dismissed: dismissedFlags });
     var sum = el("summary");
     sum.appendChild(el("h2", "Ready to schedule?"));
     host.appendChild(sum);
@@ -170,7 +177,8 @@
     if (host && lastRecord) fillReadiness(host, lastRecord, lastPrereqs);
   };
 
-  function renderReadout(rec) {
+  function renderReadout(rec, fresh) {
+    if (fresh) dismissedFlags = [];
     readoutEl.textContent = "";
     var frag = document.createDocumentFragment();
     var c = rec.customer, co = rec.counselor, au = rec.authorization || {}, tr = rec.training;
@@ -229,20 +237,65 @@
       missingList.push("⚠ VR1884 Referral: the copy loaded appears to be unfilled — no customer, counselor, training topics, or delivery method on it.");
     if (rec.derived && rec.derived.baselineGap)
       missingList.push("⚠ Baseline VR2902: this SA funds a post-training assessment but no baseline. Ask the counselor: was a baseline VR2902 already completed (possibly under an earlier SA)? If so, request a copy — the post-training assessment should re-test the same subjects and tasks. If not, ask whether a baseline should be authorized before training begins.");
-    (rec.derived && rec.derived.dateFlags || []).forEach(function (f) { missingList.push(f.text); });
+    var dismissibleKinds = (window.PacketBridgeExtract && window.PacketBridgeExtract.DISMISSIBLE_FLAGS) || [];
+    var dismissibleActive = [];
+    (rec.derived && rec.derived.dateFlags || []).forEach(function (f) {
+      if (dismissedFlags.indexOf(f.kind) !== -1) return; /* shown under Confirmed, below */
+      if (dismissibleKinds.indexOf(f.kind) !== -1) { dismissibleActive.push(f); return; }
+      missingList.push(f.text);
+    });
     (rec.derived && rec.derived.saMathProblems || []).forEach(function (prob) { missingList.push("⚠ SA math check: " + prob); });
     if (trainerFlag) missingList.push(trainerFlag);
-    if (missingList.length) {
+    if (missingList.length || dismissibleActive.length) {
       var mSec = section("Missing from this packet", missingList);
       mSec.querySelectorAll("li").forEach(function (li) { li.className = "missing-line"; });
+      var mUl = mSec.querySelector("ul");
+      dismissibleActive.forEach(function (f) {
+        var li = el("li");
+        li.className = "missing-line";
+        li.appendChild(document.createTextNode(f.text + " "));
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "dismiss-btn";
+        btn.textContent = "Dismiss — confirmed current";
+        btn.setAttribute("aria-label", "Dismiss this warning because it has been confirmed still current");
+        btn.addEventListener("click", function () {
+          dismissedFlags.push(f.kind);
+          renderReadout(lastRecord);
+        });
+        li.appendChild(btn);
+        mUl.appendChild(li);
+      });
       frag.appendChild(mSec);
+    }
+    var dismissedPresent = ((rec.derived && rec.derived.dateFlags) || []).filter(function (f) {
+      return dismissedFlags.indexOf(f.kind) !== -1;
+    });
+    if (dismissedPresent.length) {
+      var dSec = section("Confirmed — warnings dismissed", []);
+      var dUl = dSec.querySelector("ul");
+      dismissedPresent.forEach(function (f) {
+        var li = el("li", "✓ Dismissed after confirmation: " + f.text.replace(/^⚠ Date check: /, ""));
+        li.appendChild(document.createTextNode(" "));
+        var ubtn = document.createElement("button");
+        ubtn.type = "button";
+        ubtn.className = "dismiss-btn";
+        ubtn.textContent = "Undo";
+        ubtn.addEventListener("click", function () {
+          dismissedFlags = dismissedFlags.filter(function (k) { return k !== f.kind; });
+          renderReadout(lastRecord);
+        });
+        li.appendChild(ubtn);
+        dUl.appendChild(li);
+      });
+      frag.appendChild(dSec);
     }
     /* Questions routed to the person who can actually answer them:
        the counselor owns the case, the SA issuer owns the authorization,
        and contact facts are asked of the customer directly (Fernando's
        routing, 2026-11-02). */
     var qGroups = window.PacketBridgeExtract.counselorQuestions
-      ? window.PacketBridgeExtract.counselorQuestions(rec) : { counselor: [], issuer: [], customer: [] };
+      ? window.PacketBridgeExtract.counselorQuestions(rec, { dismissed: dismissedFlags }) : { counselor: [], issuer: [], customer: [] };
     var issuerQs = (qGroups.issuer || []).slice();
     if (trainerQuestion) issuerQs.push(trainerQuestion);
     if (qGroups.counselor.length) frag.appendChild(section("Questions for the counselor", qGroups.counselor));
@@ -462,7 +515,7 @@
       var easText = staged["EAS"] ? staged["EAS"].text : null;
       var record = window.PacketBridgeExtract.buildRecord(fields, saText, easText,
         staged["1884"] && staged["1884"].flat ? staged["1884"].flat : null);
-      renderReadout(record);
+      renderReadout(record, true);
       if (window.PBDetails && window.PBDetails.onRecord) window.PBDetails.onRecord(record);
       var missingDocs = (record.derived && record.derived.missingDocuments) || [];
       setStatus("Done. Readout is below" + (missingDocs.length ? " — note: this packet was read without " + missingDocs.join(", ") + "; the readout lists what is missing." : ".") +
