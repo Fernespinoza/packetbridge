@@ -241,6 +241,7 @@
       })(),
       trainingNeedsText: find(text, /determine training needs in ([^.]+)\./),
       ocrSoftware: /OCR software/i.test(text),
+      brailleSkills: find(text, /Braille Skills:\s*([^\n]+)/),
       homeHardware: find(text, /Technology at home\s*\nHardware:\s*([^\n]+)/),
       homeSoftware: find(text, /Technology at home\s*\nHardware:[^\n]*\nSoftware:\s*([^\n]+)/),
       office: {
@@ -255,9 +256,15 @@
     topics.forEach(function (t) {
       var desc = t.description || "";
       if (t.topic.indexOf("Screen Readers") === 0) {
+        /* Fusion is JAWS + ZoomText in one product — the EAS suggestion
+           code has always known that; the 1884 mapper did not, so a
+           referral whose description was just "Fusion" derived NO
+           subjects and the training silently lost its VR2902s (found on
+           Megan's corrected exam packet, 2026-11-04). */
+        if (/fusion/i.test(desc)) { subjects["Screen Reader"] = true; subjects["Screen Magnification"] = true; }
         if (/jaws|screen reader/i.test(desc)) subjects["Screen Reader"] = true;
         if (/zoomtext|magnif/i.test(desc)) subjects["Screen Magnification"] = true;
-        if (!/jaws|screen reader|zoomtext|magnif/i.test(desc))
+        if (!/jaws|screen reader|zoomtext|magnif|fusion/i.test(desc))
           notes.push("Combined screen reader/magnification topic with unclear description: \"" + desc + "\"");
       }
       else if (t.topic === "The Word Processor") subjects["Microsoft Word"] = true;
@@ -339,6 +346,14 @@
       if (barelyOverlap(aVal, bVal))
         conflicts.push(label + ": 1884 says \"" + aVal + "\", EAS says \"" + bVal + "\"");
     }
+    /* A braille-notetaker referral for a customer whose EAS says they do
+       not read braille is a capability mismatch, not a wording one
+       (Megan's Section 4 issue list, 2026-11-04: "Braille notetakers
+       selected as a training topic, however the customer does not read
+       braille"). "Unknown" braille skills (Samuel's EAS) never flag. */
+    var brailleTopicSelected = (record.training.topics || []).some(function (t) { return t.topic === "Braille Note Takers"; });
+    if (brailleTopicSelected && e.brailleSkills && /does not read braille|no braille skills|not a braille reader/i.test(e.brailleSkills))
+      conflicts.push("Braille Note Takers: 1884 selects this training topic, EAS says Braille Skills: \"" + e.brailleSkills + "\"");
     textConflict("Diagnosis", c.diagnosis, e.visualDisability);
     textConflict("Vocational goal", c.goal, e.goal);
     textConflict("Software", c.currentSoftware, e.homeSoftware);
@@ -490,6 +505,27 @@
       if (/Training/i.test(i.description) && !/Assessment/i.test(i.description)) saHoursTraining += h;
     });
 
+    /* SA window density (Megan's Section 4 issue list, 2026-11-04): the
+       original exam SA was "current" yet authorized 60 training hours
+       inside 31 days — about 13.5 hours a week, before assessments and
+       missed sessions. Dates alone said Pass; density is the real check.
+       Flag when the authorized training averages more than 2 hours per
+       weekday in the window (>10 hrs/week sustained). */
+    var saWindow = null;
+    if (saStartMs !== null && saEndMs !== null && saEndMs >= saStartMs) {
+      var calDays = Math.round((saEndMs - saStartMs) / DAY_MS) + 1;
+      var nWeekdays = 0;
+      for (var dMs = saStartMs; dMs <= saEndMs; dMs += DAY_MS) {
+        var dw = new Date(dMs).getUTCDay();
+        if (dw >= 1 && dw <= 5) nWeekdays++;
+      }
+      saWindow = { days: calDays, weekdays: nWeekdays,
+        hoursPerWeek: calDays ? Math.round(saHoursTraining * 7 / calDays * 10) / 10 : null,
+        hoursPerWeekday: nWeekdays ? Math.round(saHoursTraining / nWeekdays * 100) / 100 : null };
+      if (saHoursTraining > 0 && nWeekdays > 0 && saHoursTraining / nWeekdays > 2)
+        dateFlags.push({ kind: "sa-dense", text: "⚠ Date check: this SA authorizes " + saHoursTraining + " training hours inside a " + calDays + "-day window (" + nWeekdays + " weekdays) — about " + saWindow.hoursPerWeek + " hours a week, before the baseline and post-training assessments and any missed sessions. Finishing inside this window will be hard; an extension will likely be needed — ask for it together with any other SA changes." });
+    }
+
     var subj = subjectsFor(record.training.topics);
     var docs = [];
     record.lineItems.forEach(function (i) {
@@ -512,6 +548,7 @@
       saStatus: saStatus,
       docDates: { eas: e.consultDate || null, referral: record.referral.date || null, saIssued: record.authorization.dateIssued || null },
       saHours: { training: saHoursTraining, allHours: saHoursAll },
+      saWindow: saWindow,
       saMathProblems: saMathProblems,
       conflicts: conflicts,
       missingDocuments: missingDocuments,
@@ -784,6 +821,10 @@
         groups.issuer.push("This SA expired on " + record.authorization.endDate + " — will a new authorization be issued, or will this one be extended?");
       else if (f.kind === "sa-not-yet")
         groups.issuer.push("This SA does not start until " + record.authorization.startDate + " — please confirm the start date is correct.");
+      else if (f.kind === "sa-dense") {
+        var w = d.saWindow || {};
+        groups.issuer.push("This SA authorizes " + (d.saHours ? d.saHours.training : "?") + " training hours between " + record.authorization.startDate + " and " + record.authorization.endDate + (w.hoursPerWeek ? " — about " + w.hoursPerWeek + " hours a week" : "") + ". Should an extension be requested at the same time as the other SA changes?");
+      }
       else if (f.kind === "stale-eas")
         groups.counselor.push("The EAS is dated " + record.eas.consultDate + " — more than 6 months older than this SA. Are its recommendations still current?");
       else if (f.kind === "stale-referral")
@@ -798,6 +839,19 @@
       if (!record.training.deliveryMethod) groups.counselor.push("Which delivery method is approved for this training (in person, remote, or a mix)? The packet does not say.");
       if (!record.training.locations || !record.training.locations.length)
         groups.counselor.push("Where should the training take place? No training location is marked in this packet.");
+      /* Hardware/software are the referral's own fields: an EAS value can
+         fill the merged record, but the 1884 leaving them blank is still
+         the counselor's to complete (Megan's Section 4 issue list,
+         2026-11-04 — both were among the original packet's issues). */
+      var srcCust = (record.sources && record.sources.customer) || {};
+      if (srcCust.currentHardware !== "VR1884")
+        groups.counselor.push(record.customer.currentHardware
+          ? "The VR1884 does not list the customer's current hardware — the EAS lists \"" + record.customer.currentHardware + "\". Please confirm the hardware on the referral."
+          : "What hardware does the customer currently have? The VR1884 does not list any, and no other document in this packet does either.");
+      if (srcCust.currentSoftware !== "VR1884")
+        groups.counselor.push(record.customer.currentSoftware
+          ? "The VR1884 does not list the customer's current software — the EAS lists \"" + record.customer.currentSoftware + "\". Please confirm the software on the referral."
+          : "What software does the customer currently have? The VR1884 does not list any, and no other document in this packet does either.");
     }
     /* The customer's own questions — asked directly at first contact. */
     if (!record.customer.phone) groups.customer.push("What is the best phone number to reach you? It is not in this packet.");
@@ -835,6 +889,8 @@
       items.push(item("Authorization current", "missing", "The SA expired on " + record.authorization.endDate + "."));
     else if (d.saStatus === "not-yet")
       items.push(item("Authorization current", "check", "The SA does not start until " + record.authorization.startDate + "."));
+    else if (d.saStatus === "current" && (d.dateFlags || []).some(function (f) { return f.kind === "sa-dense"; }))
+      items.push(item("Authorization current", "check", "The SA is inside its window (" + record.authorization.startDate + " to " + record.authorization.endDate + "), but it packs " + (d.saHours ? d.saHours.training : "?") + " training hours into it" + (d.saWindow && d.saWindow.hoursPerWeek ? " — about " + d.saWindow.hoursPerWeek + " hours a week" : "") + ", before assessments and missed sessions. Ask the issuer about an extension."));
     else if (d.saStatus === "current")
       items.push(item("Authorization current", "pass", "The SA is inside its window (" + record.authorization.startDate + " to " + record.authorization.endDate + ")."));
     else
@@ -867,10 +923,11 @@
       items.push(item("Evaluation evidence", "check", "No evaluation report is in this packet and the referral does not show one provided — if an evaluation must happen before training, it is not evidenced here."));
     var planBits = [];
     if (!record.customer.phone) planBits.push("no customer phone number");
+    if (!record.customer.bestDaysToContact) planBits.push("no best time to contact");
     if (!record.training.deliveryMethod) planBits.push("no delivery method");
     if (!record.training.locations || !record.training.locations.length) planBits.push("no training location");
     if (!planBits.length)
-      items.push(item("Contact and plan clear", "pass", "Customer phone, delivery method, and training location are all known."));
+      items.push(item("Contact and plan clear", "pass", "Customer phone, best contact time, delivery method, and training location are all known."));
     else if (!record.customer.phone)
       items.push(item("Contact and plan clear", "missing", "Missing: " + planBits.join(", ") + " — the customer cannot be contacted yet."));
     else
@@ -885,9 +942,10 @@
        was completed under an earlier SA exists in no document. */
     var evidence = [];
     var hw = record.customer.currentHardware || null;
-    if (hw)
-      evidence.push("Equipment on record (from the " + (record.referral.currentHardware ? "VR1884" : "EAS report") + "): " + hw + " — whether it is set up and working is asked of the customer (see the customer questions).");
-    else
+    if (hw) {
+      var hwSrc = (record.sources && record.sources.customer && record.sources.customer.currentHardware) || null;
+      evidence.push("Equipment on record (from the " + (hwSrc === "VR1884" ? "VR1884" : hwSrc === "SA" ? "SA" : "EAS report") + "): " + hw + " — whether it is set up and working is asked of the customer (see the customer questions).");
+    } else
       evidence.push("No customer equipment is listed in this packet.");
     var ready = items.every(function (i) { return i.status === "pass"; });
     var summary;
