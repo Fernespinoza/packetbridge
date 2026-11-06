@@ -171,6 +171,12 @@
     text("Provider Full Fax Number", profile.fax);
     text("Provider Email Address", profile.email);
     text("Provider Trainer", profile.trainer);
+    /* The signature block's typed/printed name is the provider's name in
+       print — not a signature. Megan's Section 4 grading (2026-11-05)
+       deducted for leaving it blank, so it is filled from the profile.
+       The signature itself and the date signed stay blank for the
+       provider's hand, as always. */
+    text("Provider Typed or Printed name", profile.trainer);
     /* Prep treatment (Fernando, 2026-11-04, after seeing v0.21.0's output
        on his Section 4 report): when no sessions exist the packet is a
        prep — the report date stays blank too, even though the form
@@ -182,7 +188,12 @@
     var objectives = record.training.topics.map(function (t) {
       return t.description ? (t.label + " — " + t.description) : t.label;
     });
-    text("Training Objectives", objectives.join("\n"));
+    /* On a PREP packet the objectives stay blank too (Megan's Section 4
+       grading, 2026-11-05): objectives are set with the customer when
+       services begin, so printing the referral's topics onto a report
+       prepared in advance claims a step that has not happened yet. A
+       report with sessions keeps them, as Fernando's own shells do. */
+    if (sessions.length) text("Training Objectives", objectives.join("\n"));
     /* "Used in This Training Session" is what the TRAINER used — entered on
        the form. It is NOT copied from the customer's own hardware/software
        on the referral (that is what the customer owns, a different fact). */
