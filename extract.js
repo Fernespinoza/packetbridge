@@ -159,7 +159,22 @@
      a value with no @ is not an email address. */
   function emailValue(v) { return v && /@/.test(v) ? v : null; }
   function normalizeText(text) {
-    return String(text).replace(/[ \t]+/g, " ").replace(/ :/g, ":");
+    var t = String(text).replace(/[ \t]+/g, " ").replace(/ :/g, ":");
+    /* Printed-webpage PDFs (RehabWorks SA prints, first seen on the Matthew
+       Bryant teaching SA, Nov 12, 2026) letter-space their numbers: dates
+       arrive as "09 / 21 /202 6" and totals as "$ 3 ,074 .00", which made
+       the date matchers capture "09" and the total matcher capture "3" —
+       false "dates could not be read" and SA-math flags on a clean SA.
+       Squeeze spaces inside date-shaped tokens (validated before the
+       squeeze, so acuity pairs like "20/200 20/200" stay untouched) and
+       around money commas and decimal points. */
+    t = t.replace(/\d[\d ]*\/[\d ]*\/[\d ]*\d/g, function (m) {
+      var squeezed = m.replace(/ /g, "");
+      return /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(squeezed) ? squeezed : m;
+    });
+    t = t.replace(/(\d) ,(\d)/g, "$1,$2").replace(/(\d), (\d)/g, "$1,$2")
+         .replace(/(\d) \.(\d)/g, "$1.$2");
+    return t;
   }
 
   function parseSA(rawText) {
@@ -176,6 +191,14 @@
       totalCost: find(text, /Total Cost:\s*\$\s*([\d,]+)/),
       deliveryInstructions: find(text, /Delivery Instructions:\s*([^\n]+)/)
     };
+    /* On two-column SA prints the text layer runs the left column into the
+       label: a blank Delivery Instructions box "captures" the next printed
+       label's line (the Bryant SA captured its Vendor Number line). A
+       capture that IS another field's label means the box is blank. */
+    if (auth.deliveryInstructions &&
+        /^(Vendor Number|Invoice To|Date Issued|Start Date|End Date|Contract Number|Account Number|TWC Contact|Customer Name|Case ID)\b/.test(auth.deliveryInstructions)) {
+      auth.deliveryInstructions = null;
+    }
     /* The SA's delivery instructions sometimes name who must deliver the
        training ("provided by ..."). Surface that name so the readout can
        flag it when it is not the trainer in the provider profile. A mere
